@@ -15,9 +15,20 @@ export type FlowEdgeData = { trafficShare: number; kind: "sync" | "async" };
 
 export type ComponentFlowEdge = Edge<FlowEdgeData>;
 
+/**
+ * DOM-measured node sizes, keyed by node id. Ephemeral shell state — never part
+ * of DesignGraph. React Flow keeps nodes at visibility:hidden unless the sizes
+ * it reported via dimension changes are echoed back on the nodes prop.
+ */
+export type NodeMeasurements = Record<
+  string,
+  { width: number; height: number }
+>;
+
 export function toFlow(
   graph: DesignGraph,
   selectedNodeIds: string[],
+  measured: NodeMeasurements = {},
 ): { nodes: ComponentFlowNode[]; edges: ComponentFlowEdge[] } {
   return {
     nodes: graph.nodes.map((n) => ({
@@ -26,6 +37,7 @@ export function toFlow(
       position: n.position,
       data: { kind: n.kind, label: n.label, config: n.config, util: 0 },
       selected: selectedNodeIds.includes(n.id),
+      measured: measured[n.id],
     })),
     edges: graph.edges.map((e) => ({
       id: e.id,
