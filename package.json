@@ -14,11 +14,13 @@
     "db:migrate": "drizzle-kit migrate"
   },
   "dependencies": {
+    "@xyflow/react": "^12.11.2",
     "drizzle-orm": "^0.45.2",
     "next": "16.2.10",
     "postgres": "^3.4.9",
     "react": "19.2.4",
-    "react-dom": "19.2.4"
+    "react-dom": "19.2.4",
+    "zustand": "^5.0.14"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
