@@ -15,7 +15,7 @@ module.exports = {
       severity: "error",
       from: { path: "^src/lib/" },
       to: {
-        path: "^node_modules/(react|react-dom|next|zustand|@xyflow)(/|$)",
+        path: "^node_modules/(react|react-dom|next|zustand|@xyflow|lucide-react)(/|$)",
       },
     },
     {
