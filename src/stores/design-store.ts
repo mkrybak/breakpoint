@@ -1,11 +1,12 @@
 import {
   applyEdgeChanges,
   applyNodeChanges,
+  type Connection,
   type EdgeChange,
   type NodeChange,
 } from "@xyflow/react";
 import { create } from "zustand";
-import type { ComponentKind, DesignGraph } from "@/lib/core";
+import type { ComponentKind, DesignEdge, DesignGraph } from "@/lib/core";
 import { getComponentDef } from "@/lib/registry";
 import {
   fromFlow,
@@ -18,12 +19,20 @@ import {
 interface DesignStore {
   graph: DesignGraph;
   selectedNodeIds: string[];
+  selectedEdgeIds: string[];
   /** DOM sizes reported by React Flow — must be echoed back or nodes stay hidden. */
   measured: NodeMeasurements;
   onNodesChange: (changes: NodeChange<ComponentFlowNode>[]) => void;
   onEdgesChange: (changes: EdgeChange<ComponentFlowEdge>[]) => void;
+  /** Creates a sync edge with full traffic share; duplicate source→target is a no-op. */
+  onConnect: (connection: Connection) => void;
   /** Creates a node with registry defaults; returns its id. Used by the palette (T-1.3). */
   addNode: (kind: ComponentKind, position: { x: number; y: number }) => string;
+  /** Edge inspector (T-1.4): patch trafficShare and/or sync-async kind. */
+  updateEdge: (
+    id: string,
+    patch: Partial<Pick<DesignEdge, "trafficShare" | "kind">>,
+  ) => void;
   setGraph: (graph: DesignGraph) => void;
 }
 
@@ -54,11 +63,17 @@ function collectMeasurements(nodes: ComponentFlowNode[]): NodeMeasurements {
 export const useDesignStore = create<DesignStore>((set) => ({
   graph: emptyGraph(),
   selectedNodeIds: [],
+  selectedEdgeIds: [],
   measured: {},
 
   onNodesChange: (changes) =>
     set((s) => {
-      const { nodes, edges } = toFlow(s.graph, s.selectedNodeIds, s.measured);
+      const { nodes, edges } = toFlow(
+        s.graph,
+        s.selectedNodeIds,
+        s.measured,
+        s.selectedEdgeIds,
+      );
       const nextNodes = applyNodeChanges(changes, nodes);
       return {
         graph: fromFlow(nextNodes, edges, s.graph.entryNodeId),
@@ -69,9 +84,33 @@ export const useDesignStore = create<DesignStore>((set) => ({
 
   onEdgesChange: (changes) =>
     set((s) => {
-      const { nodes, edges } = toFlow(s.graph, s.selectedNodeIds, s.measured);
+      const { nodes, edges } = toFlow(
+        s.graph,
+        s.selectedNodeIds,
+        s.measured,
+        s.selectedEdgeIds,
+      );
       const nextEdges = applyEdgeChanges(changes, edges);
-      return { graph: fromFlow(nodes, nextEdges, s.graph.entryNodeId) };
+      return {
+        graph: fromFlow(nodes, nextEdges, s.graph.entryNodeId),
+        selectedEdgeIds: nextEdges.filter((e) => e.selected).map((e) => e.id),
+      };
+    }),
+
+  onConnect: (connection) =>
+    set((s) => {
+      const duplicate = s.graph.edges.some(
+        (e) => e.source === connection.source && e.target === connection.target,
+      );
+      if (duplicate) return {};
+      const edge: DesignEdge = {
+        id: crypto.randomUUID(),
+        source: connection.source,
+        target: connection.target,
+        trafficShare: 1,
+        kind: "sync",
+      };
+      return { graph: { ...s.graph, edges: [...s.graph.edges, edge] } };
     }),
 
   addNode: (kind, position) => {
@@ -98,5 +137,16 @@ export const useDesignStore = create<DesignStore>((set) => ({
     return id;
   },
 
-  setGraph: (graph) => set({ graph, selectedNodeIds: [], measured: {} }),
+  updateEdge: (id, patch) =>
+    set((s) => ({
+      graph: {
+        ...s.graph,
+        edges: s.graph.edges.map((e) =>
+          e.id === id ? { ...e, ...patch } : e,
+        ),
+      },
+    })),
+
+  setGraph: (graph) =>
+    set({ graph, selectedNodeIds: [], selectedEdgeIds: [], measured: {} }),
 }));

@@ -61,12 +61,13 @@ describe("flow-adapter", () => {
       entryNodeId: "n1",
     };
 
-    const { nodes, edges } = toFlow(graph, ["n1"]);
+    const { nodes, edges } = toFlow(graph, ["n1"], {}, ["e1"]);
 
     expect(nodes.find((n) => n.id === "n1")?.selected).toBe(true);
     expect(nodes.find((n) => n.id === "n2")?.selected).toBe(false);
     expect(nodes.every((n) => n.type === "component")).toBe(true);
-    expect(edges.every((e) => e.animated === true)).toBe(true);
+    expect(edges.every((e) => e.type === "flow")).toBe(true);
+    expect(edges[0].selected).toBe(true);
     expect(edges[0].data).toEqual({ trafficShare: 1, kind: "sync" });
   });
 

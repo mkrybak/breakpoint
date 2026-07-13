@@ -53,6 +53,7 @@ beforeEach(() => {
   useDesignStore.setState({
     graph: fixtureGraph(),
     selectedNodeIds: [],
+    selectedEdgeIds: [],
     measured: {},
   });
 });
@@ -62,6 +63,7 @@ describe("design-store", () => {
     useDesignStore.setState({
       graph: emptyGraph(),
       selectedNodeIds: [],
+      selectedEdgeIds: [],
       measured: {},
     });
     const cacheId = useDesignStore.getState().addNode("cache", { x: 0, y: 0 });
@@ -136,5 +138,40 @@ describe("design-store", () => {
       .getState()
       .onNodesChange([{ id: "n-app", type: "select", selected: true }]);
     expect(useDesignStore.getState().selectedNodeIds).toEqual(["n-app"]);
+  });
+
+  it("onConnect creates a sync edge with full traffic share; duplicates are no-ops", () => {
+    const connection = {
+      source: "n-client",
+      target: "n-app",
+      sourceHandle: null,
+      targetHandle: null,
+    };
+    useDesignStore.getState().onConnect(connection);
+    const { edges } = useDesignStore.getState().graph;
+    expect(edges).toHaveLength(3);
+    expect(
+      edges.find((e) => e.source === "n-client" && e.target === "n-app"),
+    ).toMatchObject({ trafficShare: 1, kind: "sync" });
+
+    useDesignStore.getState().onConnect(connection);
+    expect(useDesignStore.getState().graph.edges).toHaveLength(3);
+  });
+
+  it("updateEdge patches trafficShare and kind", () => {
+    useDesignStore
+      .getState()
+      .updateEdge("e-lb-app", { trafficShare: 0.5, kind: "async" });
+    const edge = useDesignStore
+      .getState()
+      .graph.edges.find((e) => e.id === "e-lb-app");
+    expect(edge).toMatchObject({ trafficShare: 0.5, kind: "async" });
+  });
+
+  it("tracks edge selection", () => {
+    useDesignStore
+      .getState()
+      .onEdgesChange([{ id: "e-lb-app", type: "select", selected: true }]);
+    expect(useDesignStore.getState().selectedEdgeIds).toEqual(["e-lb-app"]);
   });
 });

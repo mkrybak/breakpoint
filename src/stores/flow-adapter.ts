@@ -1,4 +1,4 @@
-import type { Edge, Node } from "@xyflow/react";
+import { MarkerType, type Edge, type Node } from "@xyflow/react";
 import type { ComponentKind, DesignGraph } from "@/lib/core";
 
 export type ComponentNodeData = {
@@ -13,7 +13,7 @@ export type ComponentFlowNode = Node<ComponentNodeData, "component">;
 
 export type FlowEdgeData = { trafficShare: number; kind: "sync" | "async" };
 
-export type ComponentFlowEdge = Edge<FlowEdgeData>;
+export type ComponentFlowEdge = Edge<FlowEdgeData, "flow">;
 
 /**
  * DOM-measured node sizes, keyed by node id. Ephemeral shell state — never part
@@ -29,6 +29,7 @@ export function toFlow(
   graph: DesignGraph,
   selectedNodeIds: string[],
   measured: NodeMeasurements = {},
+  selectedEdgeIds: string[] = [],
 ): { nodes: ComponentFlowNode[]; edges: ComponentFlowEdge[] } {
   return {
     nodes: graph.nodes.map((n) => ({
@@ -41,9 +42,11 @@ export function toFlow(
     })),
     edges: graph.edges.map((e) => ({
       id: e.id,
+      type: "flow" as const,
       source: e.source,
       target: e.target,
-      animated: true,
+      selected: selectedEdgeIds.includes(e.id),
+      markerEnd: { type: MarkerType.ArrowClosed, color: "#525252" },
       data: { trafficShare: e.trafficShare, kind: e.kind },
     })),
   };
