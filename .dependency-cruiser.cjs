@@ -15,7 +15,7 @@ module.exports = {
       severity: "error",
       from: { path: "^src/lib/" },
       to: {
-        path: "^node_modules/(react|react-dom|next|zustand|drizzle-orm|drizzle-kit|@xyflow|postgres)(/|$)",
+        path: "^node_modules/(react|react-dom|next|zustand|@xyflow)(/|$)",
       },
     },
     {
@@ -23,7 +23,7 @@ module.exports = {
       comment: "05-engines: shell imports engines, never the reverse",
       severity: "error",
       from: { path: "^src/lib/" },
-      to: { path: "^src/(app|components|stores|server)/" },
+      to: { path: "^src/(app|components|stores|persistence)/" },
     },
     {
       name: "engine-sideways-validation-simulation",

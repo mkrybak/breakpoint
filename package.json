@@ -10,15 +10,11 @@
     "depgraph": "depcruise src --config .dependency-cruiser.cjs --output-type mermaid --output-to ../module-graph.mmd",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "format": "prettier --write .",
-    "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate"
+    "format": "prettier --write ."
   },
   "dependencies": {
     "@xyflow/react": "^12.11.2",
-    "drizzle-orm": "^0.45.2",
     "next": "16.2.10",
-    "postgres": "^3.4.9",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "zustand": "^5.0.14"
@@ -29,8 +25,6 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "dependency-cruiser": "^18.1.0",
-    "dotenv": "^17.4.2",
-    "drizzle-kit": "^0.31.10",
     "eslint": "^9",
     "eslint-config-next": "16.2.10",
     "eslint-config-prettier": "^10.1.8",
