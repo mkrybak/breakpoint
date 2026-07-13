@@ -12,11 +12,14 @@ import {
   toFlow,
   type ComponentFlowEdge,
   type ComponentFlowNode,
+  type NodeMeasurements,
 } from "./flow-adapter";
 
 interface DesignStore {
   graph: DesignGraph;
   selectedNodeIds: string[];
+  /** DOM sizes reported by React Flow — must be echoed back or nodes stay hidden. */
+  measured: NodeMeasurements;
   onNodesChange: (changes: NodeChange<ComponentFlowNode>[]) => void;
   onEdgesChange: (changes: EdgeChange<ComponentFlowEdge>[]) => void;
   /** Creates a node with registry defaults; returns its id. Used by the palette (T-1.3). */
@@ -34,69 +37,39 @@ function defaultConfig(
   return config;
 }
 
-/** Demo seed so the canvas isn't empty before the palette exists (T-1.3). */
-export function seedGraph(): DesignGraph {
-  return {
-    nodes: [
-      {
-        id: "n-client",
-        kind: "client",
-        label: "Client",
-        position: { x: 0, y: 0 },
-        config: {},
-      },
-      {
-        id: "n-lb",
-        kind: "lb",
-        label: "Load balancer",
-        position: { x: 260, y: 120 },
-        config: {},
-      },
-      {
-        id: "n-app",
-        kind: "app_server",
-        label: "App server",
-        position: { x: 520, y: 240 },
-        config: defaultConfig("app_server"),
-      },
-    ],
-    edges: [
-      {
-        id: "e-client-lb",
-        source: "n-client",
-        target: "n-lb",
-        trafficShare: 1,
-        kind: "sync",
-      },
-      {
-        id: "e-lb-app",
-        source: "n-lb",
-        target: "n-app",
-        trafficShare: 1,
-        kind: "sync",
-      },
-    ],
-    entryNodeId: "n-client",
-  };
+export function emptyGraph(): DesignGraph {
+  return { nodes: [], edges: [], entryNodeId: "" };
+}
+
+function collectMeasurements(nodes: ComponentFlowNode[]): NodeMeasurements {
+  const measured: NodeMeasurements = {};
+  for (const n of nodes) {
+    if (n.measured?.width != null && n.measured?.height != null) {
+      measured[n.id] = { width: n.measured.width, height: n.measured.height };
+    }
+  }
+  return measured;
 }
 
 export const useDesignStore = create<DesignStore>((set) => ({
-  graph: seedGraph(),
+  graph: emptyGraph(),
   selectedNodeIds: [],
+  measured: {},
 
   onNodesChange: (changes) =>
     set((s) => {
-      const { nodes, edges } = toFlow(s.graph, s.selectedNodeIds);
+      const { nodes, edges } = toFlow(s.graph, s.selectedNodeIds, s.measured);
       const nextNodes = applyNodeChanges(changes, nodes);
       return {
         graph: fromFlow(nextNodes, edges, s.graph.entryNodeId),
         selectedNodeIds: nextNodes.filter((n) => n.selected).map((n) => n.id),
+        measured: collectMeasurements(nextNodes),
       };
     }),
 
   onEdgesChange: (changes) =>
     set((s) => {
-      const { nodes, edges } = toFlow(s.graph, s.selectedNodeIds);
+      const { nodes, edges } = toFlow(s.graph, s.selectedNodeIds, s.measured);
       const nextEdges = applyEdgeChanges(changes, edges);
       return { graph: fromFlow(nodes, nextEdges, s.graph.entryNodeId) };
     }),
@@ -125,5 +98,5 @@ export const useDesignStore = create<DesignStore>((set) => ({
     return id;
   },
 
-  setGraph: (graph) => set({ graph, selectedNodeIds: [] }),
+  setGraph: (graph) => set({ graph, selectedNodeIds: [], measured: {} }),
 }));

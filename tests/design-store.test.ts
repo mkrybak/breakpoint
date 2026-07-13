@@ -1,16 +1,77 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { seedGraph, useDesignStore } from "../src/stores/design-store";
+import type { DesignGraph } from "../src/lib/core";
+import { emptyGraph, useDesignStore } from "../src/stores/design-store";
+import { toFlow } from "../src/stores/flow-adapter";
+
+/** The former demo seed (client → lb → app), kept as the test fixture. */
+function fixtureGraph(): DesignGraph {
+  return {
+    nodes: [
+      {
+        id: "n-client",
+        kind: "client" as const,
+        label: "Client",
+        position: { x: 0, y: 0 },
+        config: {},
+      },
+      {
+        id: "n-lb",
+        kind: "lb" as const,
+        label: "Load balancer",
+        position: { x: 260, y: 120 },
+        config: {},
+      },
+      {
+        id: "n-app",
+        kind: "app_server" as const,
+        label: "App server",
+        position: { x: 520, y: 240 },
+        config: { replicas: 1 },
+      },
+    ],
+    edges: [
+      {
+        id: "e-client-lb",
+        source: "n-client",
+        target: "n-lb",
+        trafficShare: 1,
+        kind: "sync" as const,
+      },
+      {
+        id: "e-lb-app",
+        source: "n-lb",
+        target: "n-app",
+        trafficShare: 1,
+        kind: "sync" as const,
+      },
+    ],
+    entryNodeId: "n-client",
+  };
+}
 
 beforeEach(() => {
-  useDesignStore.setState({ graph: seedGraph(), selectedNodeIds: [] });
+  useDesignStore.setState({
+    graph: fixtureGraph(),
+    selectedNodeIds: [],
+    measured: {},
+  });
 });
 
 describe("design-store", () => {
-  it("seeds with 3 nodes, 2 edges, entryNodeId n-client", () => {
-    const { graph } = useDesignStore.getState();
-    expect(graph.nodes).toHaveLength(3);
-    expect(graph.edges).toHaveLength(2);
-    expect(graph.entryNodeId).toBe("n-client");
+  it("assigns entryNodeId when the first client lands on an empty graph", () => {
+    useDesignStore.setState({
+      graph: emptyGraph(),
+      selectedNodeIds: [],
+      measured: {},
+    });
+    const cacheId = useDesignStore.getState().addNode("cache", { x: 0, y: 0 });
+    expect(cacheId).toBeTruthy();
+    expect(useDesignStore.getState().graph.entryNodeId).toBe("");
+
+    const clientId = useDesignStore
+      .getState()
+      .addNode("client", { x: 0, y: 0 });
+    expect(useDesignStore.getState().graph.entryNodeId).toBe(clientId);
   });
 
   it("addNode creates a node with registry defaults", () => {
@@ -48,6 +109,26 @@ describe("design-store", () => {
       .getState()
       .onNodesChange([{ id: "n-client", type: "remove" }]);
     expect(useDesignStore.getState().graph.entryNodeId).toBe("");
+  });
+
+  // React Flow hides nodes (visibility: hidden) until their measured dimensions
+  // are echoed back on the nodes prop — measurements must survive the round-trip.
+  it("keeps node measurements across the store round-trip", () => {
+    useDesignStore.getState().onNodesChange([
+      {
+        id: "n-client",
+        type: "dimensions",
+        dimensions: { width: 176, height: 60 },
+      },
+    ]);
+    const { graph, selectedNodeIds, measured } = useDesignStore.getState();
+    expect(measured["n-client"]).toEqual({ width: 176, height: 60 });
+
+    const { nodes } = toFlow(graph, selectedNodeIds, measured);
+    expect(nodes.find((n) => n.id === "n-client")?.measured).toEqual({
+      width: 176,
+      height: 60,
+    });
   });
 
   it("tracks selection", () => {
