@@ -236,6 +236,42 @@ describe("propagateTraffic", () => {
     propagateTraffic(g, offered);
     expect(offered).toEqual({ read: 100, write: 50 });
   });
+
+  it("books flow on dead (partitioned) edges as unroutable at the source", () => {
+    const g = graph(
+      [
+        node("c", "client"),
+        node("cache", "cache", { hitRate: 0.8 }),
+        node("db", "db_sql"),
+      ],
+      [edge("c", "cache"), edge("cache", "db")],
+    );
+    const { perNode, perEdge, unroutable } = propagateTraffic(
+      g,
+      splitFlow(10000, 0.8),
+      undefined,
+      { deadEdges: ["e-cache-db"] },
+    );
+    expect(perEdge["e-cache-db"]).toEqual(zeroFlow());
+    expect(perNode["db"].demand).toEqual(zeroFlow());
+    expect(unroutable["cache"]).toEqual({ read: 1600, write: 2000 });
+    expect(unroutable["db"]).toEqual(zeroFlow());
+  });
+
+  it("lets an effects hitRate override beat the node's config (flush)", () => {
+    const g = graph(
+      [
+        node("c", "client"),
+        node("cache", "cache", { hitRate: 0.8 }),
+        node("db", "db_sql"),
+      ],
+      [edge("c", "cache"), edge("cache", "db")],
+    );
+    const { perNode } = propagateTraffic(g, splitFlow(10000, 0.8), undefined, {
+      hitRate: { cache: 0 },
+    });
+    expect(perNode["db"].demand).toEqual({ read: 8000, write: 2000 });
+  });
 });
 
 describe("simulate — golden 1 at frame level", () => {

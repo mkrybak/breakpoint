@@ -79,6 +79,22 @@ export const dbSqlCapacity: CapacityFn = (node, def, aliveFraction) => {
   };
 };
 
+/**
+ * How many load-sharing units a node spreads traffic across — replicas for
+ * horizontally scaled kinds, primary + read replicas for db_sql (its
+ * convention, see dbSqlCapacity), 1 otherwise. The kill rule downs whole
+ * units; the hotkey rule concentrates load onto one of them.
+ */
+export function loadShareUnits(node: DesignNode, def: ComponentDef): number {
+  if (node.kind === "db_sql") {
+    return 1 + Math.round(configNumber(node, def, "replicas", 0));
+  }
+  if (def.scaling === "horizontal") {
+    return Math.max(1, Math.round(configNumber(node, def, "replicas", 1)));
+  }
+  return 1;
+}
+
 export interface NodeModelInput {
   node: DesignNode;
   def: ComponentDef;

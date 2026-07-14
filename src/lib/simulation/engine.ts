@@ -173,6 +173,18 @@ export interface PropagationResult {
   perNode: Record<string, NodeTraffic>;
   /** every edge id appears; edges off any reachable path carry zero */
   perEdge: Record<string, Flow>;
+  /** flow a dead (partitioned) edge stranded at its source, per node id */
+  unroutable: Record<string, Flow>;
+}
+
+/**
+ * Per-tick rule effects propagation must honor (T-2.5).
+ */
+export interface PropagationOverrides {
+  /** node id → forced cache hit rate; beats the node's config */
+  hitRate?: Record<string, number>;
+  /** edge ids carrying no traffic this tick */
+  deadEdges?: readonly string[];
 }
 
 /** T-2.3 plugs the capacity model in here; default = serve everything. */
@@ -190,20 +202,27 @@ const serveAll: ServeFn = (_node, _def, inflow) => inflow;
  * async arrivals → serve → absorb read hits (hitRate) → forward the rest
  * along outbound edges by trafficShare. missed = read − read × hitRate keeps
  * hits + misses === reads exact.
+ *
+ * Flow aimed at a dead (partitioned) edge is booked in `unroutable` at the
+ * source — the tick loop counts it as dropped there.
  */
 export function propagateTraffic(
   graph: DesignGraph,
   offered: Flow,
   serve: ServeFn = serveAll,
+  overrides: PropagationOverrides = {},
 ): PropagationResult {
   const order = topoSort(graph);
   const perNode: Record<string, NodeTraffic> = {};
+  const unroutable: Record<string, Flow> = {};
   for (const n of graph.nodes) {
     perNode[n.id] = { demand: zeroFlow(), asyncArrivals: zeroFlow() };
+    unroutable[n.id] = zeroFlow();
   }
   const perEdge: Record<string, Flow> = {};
   for (const e of graph.edges) perEdge[e.id] = zeroFlow();
-  if (order.length === 0) return { order, perNode, perEdge };
+  if (order.length === 0) return { order, perNode, perEdge, unroutable };
+  const dead = new Set(overrides.deadEdges ?? []);
 
   const nodeById = new Map(graph.nodes.map((n) => [n.id, n]));
   const position = new Map(order.map((id, i) => [id, i]));
@@ -215,7 +234,7 @@ export function propagateTraffic(
     const def = getComponentDef(node.kind);
     const traffic = perNode[id];
     const served = serve(node, def, addFlow(traffic.demand, traffic.asyncArrivals));
-    const hitRate = configNumber(node, def, "hitRate");
+    const hitRate = overrides.hitRate?.[id] ?? configNumber(node, def, "hitRate");
     const forwarded: Flow = {
       read: served.read - served.read * hitRate,
       write: served.write,
@@ -226,6 +245,10 @@ export function propagateTraffic(
       // back/self edges (cycles) and edges into the entry carry nothing
       if (to === undefined || to <= (position.get(id) ?? 0)) continue;
       const flow = scaleFlow(forwarded, edge.trafficShare);
+      if (dead.has(edge.id)) {
+        unroutable[id] = addFlow(unroutable[id], flow);
+        continue;
+      }
       perEdge[edge.id] = flow;
       const target = perNode[edge.target];
       if (edge.kind === "async") {
@@ -235,7 +258,7 @@ export function propagateTraffic(
       }
     }
   }
-  return { order, perNode, perEdge };
+  return { order, perNode, perEdge, unroutable };
 }
 
 /** Simulation clock: 10 ticks/s (dt = 100 ms). */
@@ -251,8 +274,15 @@ const P95_FACTOR = 1.6;
 export interface TickEffects {
   /** offered load at the entry this tick, before the read/write split */
   offeredRps: number;
-  /** node id → alive fraction; absent = 1 (healthy). The kill rule writes here. */
+  /**
+   * node id → capacity multiplier; absent = 1 (healthy). kill writes the
+   * surviving fraction here, hotkey its imbalance penalty — they compose ×.
+   */
   aliveFraction?: Record<string, number>;
+  /** node id → forced cache hit rate (flush rule); beats the node's config */
+  hitRate?: Record<string, number>;
+  /** edge ids carrying no traffic this tick (partition rule) */
+  deadEdges?: string[];
 }
 
 export type ApplyRulesFn = (
@@ -345,6 +375,7 @@ export function simulate(
       graph,
       splitFlow(effects.offeredRps, scenario.readRatio),
       (node, def, inflow) => evaluate(node, def, inflow).served,
+      { hitRate: effects.hitRate, deadEdges: effects.deadEdges },
     );
 
     const perNode: SimFrame["perNode"] = {};
@@ -355,11 +386,12 @@ export function simulate(
       const out =
         outputs.get(node.id) ??
         evaluate(node, getComponentDef(node.kind), zeroFlow());
-      totalDropped += out.dropped;
+      const lost = flowRps(prop.unroutable[node.id]);
+      totalDropped += out.dropped + lost;
       perNode[node.id] = {
         util: out.util,
         queued: flowRps(out.queued),
-        dropped: out.dropped,
+        dropped: out.dropped + lost,
         state: out.state,
       };
       queuedPrev.set(node.id, out.queued);
