@@ -180,6 +180,7 @@ describe("serve math", () => {
       queued: zeroFlow(),
       dropped: 0,
       util: 0,
+      latencyMs: 8,
       state: "ok",
     });
   });
@@ -223,5 +224,33 @@ describe("transition events", () => {
     );
     expect(transitionEvent("App", "hot", 3000)).toBe("App running hot");
     expect(transitionEvent("App", "ok", 1000)).toBe("App recovered");
+  });
+});
+
+describe("latency (M/M/1 + queue wait)", () => {
+  it("scales service time by 1 / (1 - util)", () => {
+    expect(tick(node("app"), { read: 2000, write: 0 }).latencyMs).toBe(
+      8 / (1 - 0.5),
+    );
+  });
+
+  it("caps util at 0.95 and adds queue wait when overloaded", () => {
+    const ticks = runTicks(node("app"), [
+      { read: 5000, write: 0 },
+      { read: 5000, write: 0 },
+    ]);
+    // queued 1000 → wait (1000/4000)×1000 = 250ms; then 2000 → 500ms
+    expect(ticks[0].latencyMs).toBe(8 / (1 - 0.95) + 250);
+    expect(ticks[1].latencyMs).toBe(8 / (1 - 0.95) + 500);
+  });
+
+  it("unlimited nodes sit at baseMs", () => {
+    expect(tick(node("b", "blob"), { read: 1e9, write: 0 }).latencyMs).toBe(
+      50,
+    );
+  });
+
+  it("a down node reports baseMs — its traffic drops, latency is moot", () => {
+    expect(tick(node("app"), { read: 1000, write: 0 }, 0).latencyMs).toBe(8);
   });
 });

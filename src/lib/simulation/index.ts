@@ -7,3 +7,5 @@ export type {
 } from "./types";
 export { mulberry32 } from "./rng";
 export type { Rng } from "./rng";
+export { simulate, TICKS_PER_SEC } from "./engine";
+export type { ApplyRulesFn, TickEffects } from "./engine";

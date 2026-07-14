@@ -98,6 +98,8 @@ export interface NodeModelOutput {
   dropped: number;
   /** demand / effectiveCapacity; max of the two ratios when split; 0 when unlimited */
   util: number;
+  /** mean ms a request spends at this node: M/M/1 service time + queue wait */
+  latencyMs: number;
   state: NodeState;
 }
 
@@ -122,8 +124,12 @@ function splitByFlow(flow: Flow, flowTotal: number, total: number): Flow {
   return { read, write: total - read };
 }
 
+/** M/M/1 service time blows up at util → 1; the spec caps the term at 0.95. */
+const MAX_MM1_UTIL = 0.95;
+
 /**
- * The spec's tick-loop step 3 (03-simulation-engine.md), shared by every
+ * The spec's tick-loop step 3 plus the per-node half of step 4 — latency —
+ * (03-simulation-engine.md), shared by every
  * kind — only the capacity computation varies. All quantities stay in the
  * spec's literal RPS units; the queue backlog re-enters demand next tick and
  * clamps at maxQueue = 0.5 × total capacity ("0.5s of capacity").
@@ -158,12 +164,16 @@ export function makeModel(capacity: CapacityFn): NodeModel {
     const overflowTotal = flowRps(overflow);
     const maxQueue = Number.isFinite(totalCap) ? 0.5 * totalCap : 0;
     const queuedTotal = Math.min(overflowTotal, maxQueue);
+    // queuedTotal > 0 implies a finite positive totalCap (else maxQueue is 0)
+    const queueWaitMs = queuedTotal > 0 ? (queuedTotal / totalCap) * 1000 : 0;
 
     return {
       served,
       queued: splitByFlow(overflow, overflowTotal, queuedTotal),
       dropped: overflowTotal - queuedTotal,
       util,
+      latencyMs:
+        def.latency.baseMs / (1 - Math.min(util, MAX_MM1_UTIL)) + queueWaitMs,
       state: nodeState(util, totalCap),
     };
   };

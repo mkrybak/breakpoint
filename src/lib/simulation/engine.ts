@@ -1,5 +1,21 @@
-import type { ComponentDef, DesignEdge, DesignGraph, DesignNode } from "@/lib/core";
+import type {
+  ComponentDef,
+  DesignEdge,
+  DesignGraph,
+  DesignNode,
+  NodeState,
+  Scenario,
+  SimFrame,
+} from "@/lib/core";
 import { getComponentDef } from "@/lib/registry";
+// ./node-models imports ./engine back (Flow + config helpers). The cycle is
+// init-safe: neither module reads the other's bindings until a function runs.
+import {
+  getNodeModel,
+  transitionEvent,
+  type NodeModelOutput,
+} from "./node-models";
+import { mulberry32, type Rng } from "./rng";
 
 /**
  * Traffic is tracked as a read/write pair end-to-end: the cache split absorbs
@@ -220,4 +236,165 @@ export function propagateTraffic(
     }
   }
   return { order, perNode, perEdge };
+}
+
+/** Simulation clock: 10 ticks/s (dt = 100 ms). */
+export const TICKS_PER_SEC = 10;
+
+/** p95 ≈ 1.6 × mean — the spec's documented approximation. */
+const P95_FACTOR = 1.6;
+
+/**
+ * What the scenario timeline does to one tick. T-2.5's stress rules compile
+ * the timeline into these; until then the default is steady base load.
+ */
+export interface TickEffects {
+  /** offered load at the entry this tick, before the read/write split */
+  offeredRps: number;
+  /** node id → alive fraction; absent = 1 (healthy). The kill rule writes here. */
+  aliveFraction?: Record<string, number>;
+}
+
+export type ApplyRulesFn = (
+  tickIndex: number,
+  scenario: Scenario,
+  rng: Rng,
+) => TickEffects;
+
+const steadyBaseLoad: ApplyRulesFn = (_tickIndex, scenario) => ({
+  offeredRps: scenario.baseRps,
+});
+
+/**
+ * Mean client-visible latency (tick-loop step 4): a node contributes its own
+ * latencyMs plus the traffic-weighted latency of its sync downstream —
+ * weight = edge flow / the node's served total, so a cache shortens the path
+ * by exactly the traffic it absorbs. Async edges are off the client path
+ * (queues absorb bursts; their delay shows in node metrics, not p95).
+ * Back/self edges are skipped with the same rule propagation uses.
+ */
+function meanPathMs(
+  graph: DesignGraph,
+  prop: PropagationResult,
+  outputs: Map<string, NodeModelOutput>,
+): number {
+  const position = new Map(prop.order.map((id, i) => [id, i]));
+  const pathMs = new Map<string, number>();
+  for (let i = prop.order.length - 1; i >= 0; i--) {
+    const id = prop.order[i];
+    const out = outputs.get(id);
+    if (!out) continue;
+    const servedTotal = flowRps(out.served);
+    let ms = out.latencyMs;
+    for (const edge of graph.edges) {
+      if (edge.source !== id || edge.kind === "async") continue;
+      const to = position.get(edge.target);
+      if (to === undefined || to <= i) continue;
+      const weight =
+        servedTotal > 0 ? flowRps(prop.perEdge[edge.id]) / servedTotal : 0;
+      ms += weight * (pathMs.get(edge.target) ?? 0);
+    }
+    pathMs.set(id, ms);
+  }
+  return pathMs.get(graph.entryNodeId) ?? 0;
+}
+
+/**
+ * The full tick loop (03-simulation-engine): rules → propagate → node models
+ * → latency → frame. Total on any input and pure: the only randomness is
+ * mulberry32(scenario.seed) handed to `applyRules`, so the same
+ * (graph, scenario, seed) always yields byte-identical frames.
+ */
+export function simulate(
+  graph: DesignGraph,
+  scenario: Scenario,
+  applyRules: ApplyRulesFn = steadyBaseLoad,
+): SimFrame[] {
+  const rng = mulberry32(scenario.seed);
+  const tickCount = Math.max(
+    0,
+    Math.round(scenario.durationSec * TICKS_PER_SEC),
+  );
+  const queuedPrev = new Map<string, Flow>(
+    graph.nodes.map((n) => [n.id, zeroFlow()]),
+  );
+  const prevState = new Map<string, NodeState>(
+    graph.nodes.map((n) => [n.id, "ok"]),
+  );
+  const frames: SimFrame[] = [];
+
+  for (let tick = 0; tick < tickCount; tick++) {
+    const effects = applyRules(tick, scenario, rng);
+    const outputs = new Map<string, NodeModelOutput>();
+    const evaluate = (
+      node: DesignNode,
+      def: ComponentDef,
+      inflow: Flow,
+    ): NodeModelOutput => {
+      const out = getNodeModel(node.kind)({
+        node,
+        def,
+        inflow,
+        queuedPrev: queuedPrev.get(node.id) ?? zeroFlow(),
+        aliveFraction: effects.aliveFraction?.[node.id] ?? 1,
+      });
+      outputs.set(node.id, out);
+      return out;
+    };
+    const prop = propagateTraffic(
+      graph,
+      splitFlow(effects.offeredRps, scenario.readRatio),
+      (node, def, inflow) => evaluate(node, def, inflow).served,
+    );
+
+    const perNode: SimFrame["perNode"] = {};
+    const events: string[] = [];
+    let totalDropped = 0;
+    for (const node of graph.nodes) {
+      // nodes propagation never reached still tick, so backlogs drain/drop
+      const out =
+        outputs.get(node.id) ??
+        evaluate(node, getComponentDef(node.kind), zeroFlow());
+      totalDropped += out.dropped;
+      perNode[node.id] = {
+        util: out.util,
+        queued: flowRps(out.queued),
+        dropped: out.dropped,
+        state: out.state,
+      };
+      queuedPrev.set(node.id, out.queued);
+      if (out.state !== prevState.get(node.id)) {
+        prevState.set(node.id, out.state);
+        events.push(
+          transitionEvent(node.label, out.state, flowRps(out.served)),
+        );
+      }
+    }
+
+    const perEdge: SimFrame["perEdge"] = {};
+    for (const edge of graph.edges) {
+      perEdge[edge.id] = { rps: flowRps(prop.perEdge[edge.id]) };
+    }
+
+    frames.push({
+      t: tick / TICKS_PER_SEC,
+      perNode,
+      perEdge,
+      p95Ms: P95_FACTOR * meanPathMs(graph, prop, outputs),
+      errorRate:
+        effects.offeredRps > 0
+          ? Math.min(1, totalDropped / effects.offeredRps)
+          : totalDropped > 0
+            ? 1
+            : 0,
+      // accepted-not-dropped; queued work counts until it drops. A graph
+      // with no entry serves nothing, whatever was offered.
+      servedRps:
+        prop.order.length === 0
+          ? 0
+          : Math.max(0, effects.offeredRps - totalDropped),
+      events,
+    });
+  }
+  return frames;
 }
