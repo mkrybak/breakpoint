@@ -1,5 +1,9 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { DesignGraph } from "../src/lib/core";
+import {
+  buildDesignRecord,
+  designStorageKey,
+} from "../src/persistence/local";
 import { emptyGraph, useDesignStore } from "../src/stores/design-store";
 import { toFlow } from "../src/stores/flow-adapter";
 
@@ -49,13 +53,34 @@ function fixtureGraph(): DesignGraph {
   };
 }
 
+function createStorageMock() {
+  const data = new Map<string, string>();
+  return {
+    getItem: (key: string) => data.get(key) ?? null,
+    setItem: (key: string, value: string) => void data.set(key, value),
+    removeItem: (key: string) => void data.delete(key),
+    clear: () => data.clear(),
+    key: (index: number) => [...data.keys()][index] ?? null,
+    get length() {
+      return data.size;
+    },
+  };
+}
+
 beforeEach(() => {
+  vi.stubGlobal("localStorage", createStorageMock());
   useDesignStore.setState({
     graph: fixtureGraph(),
+    designId: null,
+    designName: "Untitled design",
     selectedNodeIds: [],
     selectedEdgeIds: [],
     measured: {},
   });
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
 });
 
 describe("design-store", () => {
@@ -173,5 +198,71 @@ describe("design-store", () => {
       .getState()
       .onEdgesChange([{ id: "e-lb-app", type: "select", selected: true }]);
     expect(useDesignStore.getState().selectedEdgeIds).toEqual(["e-lb-app"]);
+  });
+
+  it("updateNodeConfig patches a single config key", () => {
+    useDesignStore.getState().updateNodeConfig("n-app", "replicas", 4);
+    const node = useDesignStore
+      .getState()
+      .graph.nodes.find((n) => n.id === "n-app");
+    expect(node?.config).toEqual({ replicas: 4 });
+  });
+
+  it("renameNode updates the label", () => {
+    useDesignStore.getState().renameNode("n-app", "API tier");
+    const node = useDesignStore
+      .getState()
+      .graph.nodes.find((n) => n.id === "n-app");
+    expect(node?.label).toBe("API tier");
+  });
+
+  it("attachDesign loads the persisted record", () => {
+    const record = buildDesignRecord("d1", "Saved design", fixtureGraph());
+    localStorage.setItem(designStorageKey("d1"), JSON.stringify(record));
+
+    useDesignStore.getState().attachDesign("d1");
+    const s = useDesignStore.getState();
+    expect(s.designId).toBe("d1");
+    expect(s.designName).toBe("Saved design");
+    expect(s.graph).toEqual(fixtureGraph());
+  });
+
+  it("attachDesign starts empty when nothing is stored", () => {
+    useDesignStore.getState().attachDesign("d-fresh");
+    const s = useDesignStore.getState();
+    expect(s.designId).toBe("d-fresh");
+    expect(s.designName).toBe("Untitled design");
+    expect(s.graph).toEqual(emptyGraph());
+  });
+
+  it("importRecord adopts graph and name but keeps the attached id", () => {
+    useDesignStore.setState({ designId: "current" });
+    const record = buildDesignRecord("other-id", "Imported", fixtureGraph());
+
+    useDesignStore.getState().importRecord(record);
+    const s = useDesignStore.getState();
+    expect(s.designId).toBe("current");
+    expect(s.designName).toBe("Imported");
+    expect(s.graph).toEqual(fixtureGraph());
+    expect(s.selectedNodeIds).toEqual([]);
+  });
+
+  it("autosaves to localStorage after edits settle", () => {
+    vi.useFakeTimers();
+    try {
+      useDesignStore.getState().attachDesign("d-auto");
+      useDesignStore.getState().addNode("cache", { x: 0, y: 0 });
+      expect(localStorage.getItem(designStorageKey("d-auto"))).toBeNull();
+
+      vi.advanceTimersByTime(600);
+      const stored = localStorage.getItem(designStorageKey("d-auto"));
+      expect(stored).not.toBeNull();
+      const record = JSON.parse(stored ?? "{}") as {
+        graph: { nodes: unknown[] };
+      };
+      expect(record.graph.nodes).toHaveLength(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

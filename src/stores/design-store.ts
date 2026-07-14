@@ -9,6 +9,12 @@ import { create } from "zustand";
 import type { ComponentKind, DesignEdge, DesignGraph } from "@/lib/core";
 import { getComponentDef } from "@/lib/registry";
 import {
+  buildDesignRecord,
+  loadDesign,
+  saveDesign,
+  type DesignRecord,
+} from "@/persistence/local";
+import {
   fromFlow,
   toFlow,
   type ComponentFlowEdge,
@@ -16,8 +22,13 @@ import {
   type NodeMeasurements,
 } from "./flow-adapter";
 
+const DEFAULT_DESIGN_NAME = "Untitled design";
+
 interface DesignStore {
   graph: DesignGraph;
+  /** localStorage slot this session autosaves to; null until a page attaches. */
+  designId: string | null;
+  designName: string;
   selectedNodeIds: string[];
   selectedEdgeIds: string[];
   /** DOM sizes reported by React Flow — must be echoed back or nodes stay hidden. */
@@ -33,6 +44,17 @@ interface DesignStore {
     id: string,
     patch: Partial<Pick<DesignEdge, "trafficShare" | "kind">>,
   ) => void;
+  /** Config panel (T-1.5): set one config key on a node. */
+  updateNodeConfig: (
+    id: string,
+    key: string,
+    value: number | string | boolean,
+  ) => void;
+  renameNode: (id: string, label: string) => void;
+  /** Bind this session to a design id and load its autosaved record, if any. */
+  attachDesign: (id: string) => void;
+  /** Adopt an imported file's graph + name; the attached designId is kept. */
+  importRecord: (record: DesignRecord) => void;
   setGraph: (graph: DesignGraph) => void;
 }
 
@@ -62,6 +84,8 @@ function collectMeasurements(nodes: ComponentFlowNode[]): NodeMeasurements {
 
 export const useDesignStore = create<DesignStore>((set) => ({
   graph: emptyGraph(),
+  designId: null,
+  designName: DEFAULT_DESIGN_NAME,
   selectedNodeIds: [],
   selectedEdgeIds: [],
   measured: {},
@@ -147,6 +171,63 @@ export const useDesignStore = create<DesignStore>((set) => ({
       },
     })),
 
+  updateNodeConfig: (id, key, value) =>
+    set((s) => ({
+      graph: {
+        ...s.graph,
+        nodes: s.graph.nodes.map((n) =>
+          n.id === id ? { ...n, config: { ...n.config, [key]: value } } : n,
+        ),
+      },
+    })),
+
+  renameNode: (id, label) =>
+    set((s) => ({
+      graph: {
+        ...s.graph,
+        nodes: s.graph.nodes.map((n) => (n.id === id ? { ...n, label } : n)),
+      },
+    })),
+
+  attachDesign: (id) => {
+    const record = loadDesign(id);
+    set({
+      designId: id,
+      designName: record?.name ?? DEFAULT_DESIGN_NAME,
+      graph: record?.graph ?? emptyGraph(),
+      selectedNodeIds: [],
+      selectedEdgeIds: [],
+      measured: {},
+    });
+  },
+
+  importRecord: (record) =>
+    set({
+      graph: record.graph,
+      designName: record.name,
+      selectedNodeIds: [],
+      selectedEdgeIds: [],
+      measured: {},
+    }),
+
   setGraph: (graph) =>
     set({ graph, selectedNodeIds: [], selectedEdgeIds: [], measured: {} }),
 }));
+
+const AUTOSAVE_DELAY_MS = 500;
+let autosaveTimer: ReturnType<typeof setTimeout> | undefined;
+
+// Debounced localStorage autosave. Attaching (designId change) is not a user
+// edit — skipping it avoids echo-saving a just-loaded record.
+useDesignStore.subscribe((state, prev) => {
+  if (state.designId === null || state.designId !== prev.designId) return;
+  if (state.graph === prev.graph && state.designName === prev.designName) {
+    return;
+  }
+  clearTimeout(autosaveTimer);
+  autosaveTimer = setTimeout(() => {
+    const s = useDesignStore.getState();
+    if (s.designId === null) return;
+    saveDesign(buildDesignRecord(s.designId, s.designName, s.graph));
+  }, AUTOSAVE_DELAY_MS);
+});

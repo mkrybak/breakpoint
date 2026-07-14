@@ -1,5 +1,6 @@
 import { DesignCanvas } from "@/components/canvas/DesignCanvas";
 import { Palette } from "@/components/palette/Palette";
+import { NodeConfigPanel } from "@/components/panels/NodeConfigPanel";
 
 export default async function DesignPage({
   params,
@@ -13,6 +14,7 @@ export default async function DesignPage({
       <main className="min-w-0 flex-1">
         <DesignCanvas designId={id} />
       </main>
+      <NodeConfigPanel designId={id} />
     </div>
   );
 }
