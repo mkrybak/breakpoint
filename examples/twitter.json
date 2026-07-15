@@ -1,0 +1,98 @@
+{
+  "entryNodeId": "client",
+  "nodes": [
+    {
+      "id": "client",
+      "kind": "client",
+      "label": "Client",
+      "position": { "x": 0, "y": 200 },
+      "config": {}
+    },
+    {
+      "id": "lb",
+      "kind": "lb",
+      "label": "Load balancer",
+      "position": { "x": 200, "y": 200 },
+      "config": {}
+    },
+    {
+      "id": "app",
+      "kind": "app_server",
+      "label": "App fleet",
+      "position": { "x": 400, "y": 200 },
+      "config": { "replicas": 8 }
+    },
+    {
+      "id": "cache",
+      "kind": "cache",
+      "label": "Timeline cache",
+      "position": { "x": 600, "y": 200 },
+      "config": { "replicas": 2, "hitRate": 0.8 }
+    },
+    {
+      "id": "db",
+      "kind": "db_sql",
+      "label": "Postgres",
+      "position": { "x": 800, "y": 200 },
+      "config": { "replicas": 2 }
+    },
+    {
+      "id": "fanout",
+      "kind": "queue",
+      "label": "Fanout queue",
+      "position": { "x": 600, "y": 400 },
+      "config": {}
+    },
+    {
+      "id": "workers",
+      "kind": "worker",
+      "label": "Fanout workers",
+      "position": { "x": 800, "y": 400 },
+      "config": { "replicas": 8 }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e-client-lb",
+      "source": "client",
+      "target": "lb",
+      "trafficShare": 1,
+      "kind": "sync"
+    },
+    {
+      "id": "e-lb-app",
+      "source": "lb",
+      "target": "app",
+      "trafficShare": 1,
+      "kind": "sync"
+    },
+    {
+      "id": "e-app-cache",
+      "source": "app",
+      "target": "cache",
+      "trafficShare": 1,
+      "kind": "sync"
+    },
+    {
+      "id": "e-cache-db",
+      "source": "cache",
+      "target": "db",
+      "trafficShare": 1,
+      "kind": "sync"
+    },
+    {
+      "id": "e-app-fanout",
+      "source": "app",
+      "target": "fanout",
+      "trafficShare": 0.2,
+      "kind": "async"
+    },
+    {
+      "id": "e-fanout-workers",
+      "source": "fanout",
+      "target": "workers",
+      "trafficShare": 1,
+      "kind": "sync"
+    }
+  ]
+}

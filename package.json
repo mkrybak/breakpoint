@@ -6,10 +6,11 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint && depcruise src tests",
+    "lint": "eslint && depcruise src tests scripts",
     "depgraph": "depcruise src --config .dependency-cruiser.cjs --output-type mermaid --output-to ../module-graph.mmd",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "sim": "tsx scripts/sim.ts",
     "format": "prettier --write ."
   },
   "dependencies": {
@@ -31,6 +32,7 @@
     "eslint-config-prettier": "^10.1.8",
     "prettier": "^3.9.5",
     "tailwindcss": "^4",
+    "tsx": "^4.23.1",
     "typescript": "^5",
     "vitest": "^4.1.10"
   }

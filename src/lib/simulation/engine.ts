@@ -348,17 +348,25 @@ function meanPathMs(
   return pathMs.get(graph.entryNodeId) ?? 0;
 }
 
+/** A stepping simulation: per-run state lives in the closure. */
+export interface SimRun {
+  /** Advance one tick and return its frame; null once the run is complete. */
+  tick(): SimFrame | null;
+}
+
 /**
- * The full tick loop (03-simulation-engine): rules → propagate → node models
- * → latency → frame. Total on any input and pure: the only randomness is
- * mulberry32(scenario.seed) handed to `applyRules`, so the same
- * (graph, scenario, seed) always yields byte-identical frames.
+ * Incremental form of the tick loop (03-simulation-engine): rules →
+ * propagate → node models → latency → frame, one tick per call. Total on any
+ * input and pure: the only randomness is mulberry32(scenario.seed) handed to
+ * `applyRules`, so the same (graph, scenario, seed) always yields
+ * byte-identical frames. simulate() drains it in one go; the worker paces it
+ * in real time.
  */
-export function simulate(
+export function createSimRun(
   graph: DesignGraph,
   scenario: Scenario,
   applyRules: ApplyRulesFn = steadyBaseLoad,
-): SimFrame[] {
+): SimRun {
   const rng = mulberry32(scenario.seed);
   const tickCount = Math.max(
     0,
@@ -370,82 +378,101 @@ export function simulate(
   const prevState = new Map<string, NodeState>(
     graph.nodes.map((n) => [n.id, "ok"]),
   );
-  const frames: SimFrame[] = [];
+  let tickIndex = 0;
 
-  for (let tick = 0; tick < tickCount; tick++) {
-    const effects = applyRules(tick, scenario, rng);
-    const outputs = new Map<string, NodeModelOutput>();
-    const evaluate = (
-      node: DesignNode,
-      def: ComponentDef,
-      inflow: Flow,
-    ): NodeModelOutput => {
-      const out = getNodeModel(node.kind)({
-        node,
-        def,
-        inflow,
-        queuedPrev: queuedPrev.get(node.id) ?? zeroFlow(),
-        aliveFraction: effects.aliveFraction?.[node.id] ?? 1,
-      });
-      outputs.set(node.id, out);
-      return out;
-    };
-    const prop = propagateTraffic(
-      graph,
-      splitFlow(effects.offeredRps, scenario.readRatio),
-      (node, def, inflow) => evaluate(node, def, inflow).served,
-      { hitRate: effects.hitRate, deadEdges: effects.deadEdges },
-    );
+  return {
+    tick(): SimFrame | null {
+      if (tickIndex >= tickCount) return null;
+      const tick = tickIndex;
+      tickIndex += 1;
 
-    const perNode: SimFrame["perNode"] = {};
-    const events: string[] = [];
-    let totalDropped = 0;
-    for (const node of graph.nodes) {
-      // nodes propagation never reached still tick, so backlogs drain/drop
-      const out =
-        outputs.get(node.id) ??
-        evaluate(node, getComponentDef(node.kind), zeroFlow());
-      const lost = flowRps(prop.unroutable[node.id]);
-      totalDropped += out.dropped + lost;
-      perNode[node.id] = {
-        util: out.util,
-        queued: flowRps(out.queued),
-        dropped: out.dropped + lost,
-        state: out.state,
+      const effects = applyRules(tick, scenario, rng);
+      const outputs = new Map<string, NodeModelOutput>();
+      const evaluate = (
+        node: DesignNode,
+        def: ComponentDef,
+        inflow: Flow,
+      ): NodeModelOutput => {
+        const out = getNodeModel(node.kind)({
+          node,
+          def,
+          inflow,
+          queuedPrev: queuedPrev.get(node.id) ?? zeroFlow(),
+          aliveFraction: effects.aliveFraction?.[node.id] ?? 1,
+        });
+        outputs.set(node.id, out);
+        return out;
       };
-      queuedPrev.set(node.id, out.queued);
-      if (out.state !== prevState.get(node.id)) {
-        prevState.set(node.id, out.state);
-        events.push(
-          transitionEvent(node.label, out.state, flowRps(out.served)),
-        );
+      const prop = propagateTraffic(
+        graph,
+        splitFlow(effects.offeredRps, scenario.readRatio),
+        (node, def, inflow) => evaluate(node, def, inflow).served,
+        { hitRate: effects.hitRate, deadEdges: effects.deadEdges },
+      );
+
+      const perNode: SimFrame["perNode"] = {};
+      const events: string[] = [];
+      let totalDropped = 0;
+      for (const node of graph.nodes) {
+        // nodes propagation never reached still tick, so backlogs drain/drop
+        const out =
+          outputs.get(node.id) ??
+          evaluate(node, getComponentDef(node.kind), zeroFlow());
+        const lost = flowRps(prop.unroutable[node.id]);
+        totalDropped += out.dropped + lost;
+        perNode[node.id] = {
+          util: out.util,
+          queued: flowRps(out.queued),
+          dropped: out.dropped + lost,
+          state: out.state,
+        };
+        queuedPrev.set(node.id, out.queued);
+        if (out.state !== prevState.get(node.id)) {
+          prevState.set(node.id, out.state);
+          events.push(
+            transitionEvent(node.label, out.state, flowRps(out.served)),
+          );
+        }
       }
-    }
 
-    const perEdge: SimFrame["perEdge"] = {};
-    for (const edge of graph.edges) {
-      perEdge[edge.id] = { rps: flowRps(prop.perEdge[edge.id]) };
-    }
+      const perEdge: SimFrame["perEdge"] = {};
+      for (const edge of graph.edges) {
+        perEdge[edge.id] = { rps: flowRps(prop.perEdge[edge.id]) };
+      }
 
-    frames.push({
-      t: tick / TICKS_PER_SEC,
-      perNode,
-      perEdge,
-      p95Ms: P95_FACTOR * meanPathMs(graph, prop, outputs),
-      errorRate:
-        effects.offeredRps > 0
-          ? Math.min(1, totalDropped / effects.offeredRps)
-          : totalDropped > 0
-            ? 1
-            : 0,
-      // accepted-not-dropped; queued work counts until it drops. A graph
-      // with no entry serves nothing, whatever was offered.
-      servedRps:
-        prop.order.length === 0
-          ? 0
-          : Math.max(0, effects.offeredRps - totalDropped),
-      events,
-    });
+      return {
+        t: tick / TICKS_PER_SEC,
+        perNode,
+        perEdge,
+        p95Ms: P95_FACTOR * meanPathMs(graph, prop, outputs),
+        errorRate:
+          effects.offeredRps > 0
+            ? Math.min(1, totalDropped / effects.offeredRps)
+            : totalDropped > 0
+              ? 1
+              : 0,
+        // accepted-not-dropped; queued work counts until it drops. A graph
+        // with no entry serves nothing, whatever was offered.
+        servedRps:
+          prop.order.length === 0
+            ? 0
+            : Math.max(0, effects.offeredRps - totalDropped),
+        events,
+      };
+    },
+  };
+}
+
+/** The full tick loop in one call: every frame of the run. */
+export function simulate(
+  graph: DesignGraph,
+  scenario: Scenario,
+  applyRules: ApplyRulesFn = steadyBaseLoad,
+): SimFrame[] {
+  const run = createSimRun(graph, scenario, applyRules);
+  const frames: SimFrame[] = [];
+  for (let frame = run.tick(); frame !== null; frame = run.tick()) {
+    frames.push(frame);
   }
   return frames;
 }

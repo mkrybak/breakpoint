@@ -177,26 +177,38 @@ export const ruleAppliers: AppliersByRule = {
   },
 };
 
+/** A compiled timeline the worker can extend mid-run (chaos button). */
+export interface RuleEngine {
+  apply: ApplyRulesFn;
+  /** Append one rule to the running timeline; it fires per its own `at`. */
+  inject(rule: StressRule): void;
+}
+
 /**
  * Compile a scenario timeline into the engine's rules seam. Single-run: the
  * appliers hold per-run state (a ramp's captured baseline, a kill's sampled
- * victims) — compile a fresh hook for every simulate() call, passing the
- * same scenario to both.
+ * victims) — compile fresh for every simulate() call, passing the same
+ * scenario to both. `inject` appends a chaos rule's applier after the
+ * timeline's: last position is correct for every composition rule (capacity
+ * ×, hit-rate min, dead-edge ∪ are commutative; a ramp interpolates from
+ * whatever earlier appliers left, which is what a live ramp should do).
  */
-export function compileRules(
+export function createRuleEngine(
   graph: DesignGraph,
   scenario: Scenario,
-): ApplyRulesFn {
+): RuleEngine {
+  const compileRule = (rule: StressRule): RuleApplier =>
+    // safe: the map is keyed by the same discriminant that picks the entry
+    (ruleAppliers[rule.rule] as (r: StressRule, g: DesignGraph) => RuleApplier)(
+      rule,
+      graph,
+    );
+
   const appliers = [...scenario.timeline]
     .sort((a, b) => a.at - b.at) // stable sort: ties keep timeline order
-    .map((rule) =>
-      // safe: the map is keyed by the same discriminant that picks the entry
-      (ruleAppliers[rule.rule] as (r: StressRule, g: DesignGraph) => RuleApplier)(
-        rule,
-        graph,
-      ),
-    );
-  return (tick, sc, rng) => {
+    .map(compileRule);
+
+  const apply: ApplyRulesFn = (tick, sc, rng) => {
     const draft: EffectsDraft = {
       baseRps: sc.baseRps,
       factor: 1,
@@ -204,7 +216,7 @@ export function compileRules(
       hitRate: {},
       deadEdges: new Set(),
     };
-    for (const apply of appliers) apply(draft, tick, rng);
+    for (const applier of appliers) applier(draft, tick, rng);
     const effects: TickEffects = { offeredRps: draft.baseRps * draft.factor };
     if (Object.keys(draft.capacityFraction).length > 0) {
       effects.aliveFraction = draft.capacityFraction;
@@ -213,4 +225,19 @@ export function compileRules(
     if (draft.deadEdges.size > 0) effects.deadEdges = [...draft.deadEdges];
     return effects;
   };
+
+  return {
+    apply,
+    inject: (rule) => {
+      appliers.push(compileRule(rule));
+    },
+  };
+}
+
+/** The immutable-timeline form — what verdict.ts and the tests use. */
+export function compileRules(
+  graph: DesignGraph,
+  scenario: Scenario,
+): ApplyRulesFn {
+  return createRuleEngine(graph, scenario).apply;
 }

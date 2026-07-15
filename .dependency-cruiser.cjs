@@ -56,7 +56,7 @@ module.exports = {
       comment:
         "05-engines rule 1: public API via index.ts only; engine internals and tests/ are exempt",
       severity: "error",
-      from: { path: "^src/", pathNot: "^src/lib/" },
+      from: { path: "^(src|scripts)/", pathNot: "^src/lib/" },
       to: { path: "^src/lib/[^/]+/(?!index\\.ts$)" },
     },
   ],
