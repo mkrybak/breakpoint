@@ -17,3 +17,5 @@ export { evaluateVerdict } from "./verdict";
 export { buildRunResult, runSimulation } from "./run";
 export { createWorkerHost } from "./worker-host";
 export type { MainToWorker, WorkerHost, WorkerToMain } from "./worker-host";
+export { createSimWorker } from "./client";
+export type { SimWorkerHandle } from "./client";
