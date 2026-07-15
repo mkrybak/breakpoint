@@ -93,6 +93,25 @@ export function configBoolean(
 }
 
 /**
+ * Resolve a select config value: the node's config wins when it is one of
+ * the field's declared options, else the registry default. Keys the def
+ * does not declare resolve to "" — junk config can never activate behavior
+ * the registry doesn't declare.
+ */
+export function configSelect(
+  node: DesignNode,
+  def: ComponentDef,
+  key: string,
+): string {
+  const field = def.configFields.find((f) => f.key === key);
+  if (!field || field.type !== "select") return "";
+  const raw = node.config[key];
+  return typeof raw === "string" && field.options.includes(raw)
+    ? raw
+    : field.default;
+}
+
+/**
  * Topological order of the nodes reachable from the entry. Deterministic:
  * ties (and cycle stalls) resolve by graph.nodes array order. Self-loops and
  * edges into the entry are ignored — traffic starts at the entry, and

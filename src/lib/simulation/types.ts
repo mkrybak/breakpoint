@@ -4,4 +4,6 @@ export type {
   Scenario,
   SimFrame,
   StressRule,
+  Verdict,
+  VerdictFailure,
 } from "@/lib/core";

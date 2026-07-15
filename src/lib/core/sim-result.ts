@@ -17,12 +17,27 @@ export interface SimFrame {
   events: string[];
 }
 
+/** One broken pass criterion. */
+export interface VerdictFailure {
+  /** which check broke: "p95" | "error-rate" | "kill-survival" | "consistency" */
+  criterion: string;
+  /** seconds into the run; 0 for static checks */
+  atSec: number;
+  detail: string;
+}
+
+/** Evaluated over the whole run (03-simulation-engine "Verdict"). */
+export interface Verdict {
+  passed: boolean;
+  failures: VerdictFailure[];
+  /** don't fail the run — shown to the grader */
+  advisories: string[];
+}
+
 export interface RunResult {
   scenarioId: string;
   designSnapshot: DesignGraph;
   /** full replay */
   frames: SimFrame[];
-  passed: boolean;
-  /** which pass-criteria broke and when */
-  failures: string[];
+  verdict: Verdict;
 }

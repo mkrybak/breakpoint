@@ -160,6 +160,12 @@ export const COMPONENT_DEFS: Record<ComponentKind, ComponentDef> = {
         default: 0,
       },
       { key: "sharded", label: "Sharded", type: "boolean", default: false },
+      {
+        key: "readYourWrites",
+        label: "Read-your-writes",
+        type: "boolean",
+        default: false,
+      },
     ],
   },
   db_nosql: {
