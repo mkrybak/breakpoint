@@ -1,0 +1,14 @@
+{
+  "id": "celebrity-tweet",
+  "name": "Celebrity Tweet",
+  "description": "A megastar tweets: reads stampede a single hot key while retweets spike the fanout.",
+  "durationSec": 60,
+  "baseRps": 15000,
+  "readRatio": 0.95,
+  "timeline": [
+    { "at": 10, "rule": "hotkey", "skew": 0.5, "forSec": 40 },
+    { "at": 25, "rule": "spike", "factor": 3, "forSec": 15 }
+  ],
+  "pass": { "p95Ms": 200, "maxErrorRate": 0.02 },
+  "seed": 7
+}

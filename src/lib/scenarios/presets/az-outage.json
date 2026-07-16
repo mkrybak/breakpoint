@@ -1,0 +1,14 @@
+{
+  "id": "az-outage",
+  "name": "AZ Outage",
+  "description": "An availability zone drops: part of the app fleet dies and the link to the database partitions.",
+  "durationSec": 60,
+  "baseRps": 12000,
+  "readRatio": 0.8,
+  "timeline": [
+    { "at": 15, "rule": "kill", "target": "app_server", "count": 2 },
+    { "at": 15, "rule": "partition", "target": "db_sql", "forSec": 20 }
+  ],
+  "pass": { "p95Ms": 300, "maxErrorRate": 0.05, "minSurvivedKills": 1 },
+  "seed": 99
+}
