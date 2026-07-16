@@ -1,12 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { RunResult, Scenario } from "../src/lib/core";
 import type { DesignGraph } from "../src/lib/core";
+import { emptyScorecard } from "../src/lib/grading";
 import {
   buildDesignRecord,
+  buildRunBundle,
   deleteDesign,
   designStorageKey,
   listDesigns,
   loadDesign,
   parseDesignRecord,
+  parseRunBundle,
   renameDesign,
   saveDesign,
   type DesignRecord,
@@ -262,5 +266,90 @@ describe("renameDesign", () => {
     expect(renameDesign("nope", "x")).toBeNull();
     expect(renameDesign("d1", "   ")).toBeNull();
     expect(loadDesign("d1")?.name).toBe("Keep"); // unchanged
+  });
+});
+
+function fixtureScenario(): Scenario {
+  return {
+    id: "s1",
+    name: "Test scenario",
+    description: "fixture",
+    durationSec: 10,
+    baseRps: 100,
+    readRatio: 0.5,
+    timeline: [],
+    pass: { p95Ms: 200, maxErrorRate: 0.01 },
+    seed: 1,
+  };
+}
+
+function fixtureResult(): RunResult {
+  return {
+    scenarioId: "s1",
+    designSnapshot: fixtureGraph(),
+    frames: [
+      { t: 0, perNode: {}, perEdge: {}, p95Ms: 10, errorRate: 0, servedRps: 100, events: [] },
+      { t: 0.1, perNode: {}, perEdge: {}, p95Ms: 12, errorRate: 0, servedRps: 100, events: ["tick"] },
+    ],
+    verdict: { passed: true, failures: [], advisories: [] },
+  };
+}
+
+describe("parseRunBundle", () => {
+  it("round-trips a bundle → identical replay frames", () => {
+    const bundle = buildRunBundle(
+      buildDesignRecord("d1", "My design", fixtureGraph()),
+      fixtureScenario(),
+      fixtureResult(),
+      emptyScorecard(),
+    );
+    const parsed = parseRunBundle(JSON.stringify(bundle, null, 2));
+    expect(parsed.ok).toBe(true);
+    if (parsed.ok) {
+      // frames survive verbatim → replaying the import is identical to the export
+      expect(parsed.bundle.result.frames).toEqual(bundle.result.frames);
+      expect(parsed.bundle).toEqual(bundle);
+    }
+  });
+
+  it("omits scorecard when the bundle has none", () => {
+    const bundle = buildRunBundle(
+      buildDesignRecord("d1", "My design", fixtureGraph()),
+      fixtureScenario(),
+      fixtureResult(),
+    );
+    expect("scorecard" in bundle).toBe(false);
+    const parsed = parseRunBundle(JSON.stringify(bundle));
+    expect(parsed.ok).toBe(true);
+    if (parsed.ok) expect(parsed.bundle.scorecard).toBeUndefined();
+  });
+
+  it("rejects malformed bundles with a readable error", () => {
+    const good = buildRunBundle(
+      buildDesignRecord("d1", "My design", fixtureGraph()),
+      fixtureScenario(),
+      fixtureResult(),
+    );
+
+    const notJson = parseRunBundle("not json{");
+    expect(notJson.ok).toBe(false);
+    if (!notJson.ok) expect(notJson.error).toMatch(/JSON/i);
+
+    const wrongVersion = parseRunBundle(JSON.stringify({ ...good, version: 2 }));
+    expect(wrongVersion.ok).toBe(false);
+    if (!wrongVersion.ok) expect(wrongVersion.error).toMatch(/version/i);
+
+    // corrupt only the result's design snapshot → the RunResult guard rejects it
+    const badResultRaw = JSON.parse(JSON.stringify(good)) as {
+      result: { designSnapshot: { nodes: { kind: string }[] } };
+    };
+    badResultRaw.result.designSnapshot.nodes[0].kind = "mainframe";
+    const badResult = parseRunBundle(JSON.stringify(badResultRaw));
+    expect(badResult.ok).toBe(false);
+    if (!badResult.ok) expect(badResult.error).toMatch(/result/i);
+
+    const badScenario = parseRunBundle(JSON.stringify({ ...good, scenario: {} }));
+    expect(badScenario.ok).toBe(false);
+    if (!badScenario.ok) expect(badScenario.error).toMatch(/scenario/i);
   });
 });

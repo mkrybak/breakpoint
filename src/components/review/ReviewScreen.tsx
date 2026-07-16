@@ -2,13 +2,19 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Download } from "lucide-react";
+import { ArrowLeft, Download, Package } from "lucide-react";
 import type { Phase } from "@/lib/core";
 import { ReplayScrubber } from "@/components/hud/ReplayScrubber";
 import { Verdict } from "@/components/hud/Verdict";
 import { ActionTimeline } from "@/components/review/ActionTimeline";
+import { ImportDropzone } from "@/components/review/ImportDropzone";
 import { ReviewCanvas } from "@/components/review/ReviewCanvas";
 import { Scorecard } from "@/components/review/Scorecard";
+import {
+  buildDesignRecord,
+  buildRunBundle,
+  exportRunBundleFile,
+} from "@/persistence/local";
 import { buildReviewReport, exportReportFile } from "@/persistence/report";
 import { useDesignStore } from "@/stores/design-store";
 import { PHASES, formatClock } from "@/stores/phase-store";
@@ -17,6 +23,9 @@ import { useSimStore } from "@/stores/sim-store";
 
 const HEADING =
   "text-xs font-semibold tracking-wide text-neutral-400 uppercase";
+
+const BTN =
+  "flex items-center gap-1 rounded-lg border border-neutral-700 bg-neutral-900 px-2.5 py-1 text-xs font-medium text-neutral-200 hover:border-neutral-500";
 
 export function ReviewScreen({ runId }: { runId: string }) {
   const designName = useDesignStore((s) => s.designName);
@@ -39,6 +48,42 @@ export function ReviewScreen({ runId }: { runId: string }) {
       useDesignStore.getState().attachDesign(runId);
     }
   }, [runId]);
+
+  const nothingToReview =
+    result === null && graph.nodes.length === 0 && actionLog.length === 0;
+
+  const onExportBundle = () => {
+    if (!result || !runScenario) return;
+    const design = buildDesignRecord(
+      runId,
+      designName,
+      graph,
+      phaseNotes,
+      actionLog,
+    );
+    exportRunBundleFile(buildRunBundle(design, runScenario, result, scorecard));
+  };
+
+  if (nothingToReview) {
+    return (
+      <div className="flex h-dvh flex-col items-center justify-center gap-6 bg-neutral-950 p-6 text-neutral-100">
+        <div className="text-center">
+          <h1 className="text-lg font-semibold">Review a run</h1>
+          <p className="mt-1 max-w-md text-sm text-neutral-400">
+            Import a run bundle (<code>.breakpoint.json</code>) exported from an
+            interview to replay and grade it.
+          </p>
+        </div>
+        <ImportDropzone />
+        <Link
+          href="/"
+          className="text-xs text-neutral-500 hover:text-neutral-300"
+        >
+          ← Back to designs
+        </Link>
+      </div>
+    );
+  }
 
   const finalView = runGraph ?? graph;
   const viewGraph =
@@ -67,13 +112,16 @@ export function ReviewScreen({ runId }: { runId: string }) {
           <ArrowLeft className="h-3.5 w-3.5" /> Back to design
         </Link>
         <h1 className="text-sm font-semibold">{designName} — Review</h1>
-        <button
-          type="button"
-          onClick={onExport}
-          className="ml-auto flex items-center gap-1 rounded-lg border border-neutral-700 bg-neutral-900 px-2.5 py-1 text-xs font-medium text-neutral-200 hover:border-neutral-500"
-        >
-          <Download className="h-3.5 w-3.5" /> Export report
-        </button>
+        <div className="ml-auto flex items-center gap-2">
+          {result && runScenario && (
+            <button type="button" onClick={onExportBundle} className={BTN}>
+              <Package className="h-3.5 w-3.5" /> Export bundle
+            </button>
+          )}
+          <button type="button" onClick={onExport} className={BTN}>
+            <Download className="h-3.5 w-3.5" /> Export report
+          </button>
+        </div>
       </header>
 
       <div className="flex min-h-0 flex-1">

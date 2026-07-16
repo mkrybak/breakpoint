@@ -140,6 +140,8 @@ interface SimStore {
   chaos: (rule: StressRule) => void;
   scrubTo: (index: number) => void;
   reset: () => void;
+  /** Replay an imported RunBundle: repopulate frames/aggregates/log as if just run. */
+  loadResult: (result: RunResult, scenario: Scenario) => void;
 }
 
 // The worker transport is per-session and non-serializable, so it lives beside
@@ -255,6 +257,33 @@ export const useSimStore = create<SimStore>((set, get) => {
     reset: () => {
       disposeWorker();
       set({ ...IDLE });
+    },
+
+    loadResult: (result, scenario) => {
+      disposeWorker();
+      const nodeOrder = result.designSnapshot.nodes.map((n) => n.id);
+      let aggregates = emptyAggregates();
+      let log: SimLogEntry[] = [];
+      for (const frame of result.frames) {
+        aggregates = foldAggregates(aggregates, frame, nodeOrder);
+        log = appendLog(log, frame);
+      }
+      set({
+        ...IDLE,
+        status: "done",
+        frames: result.frames,
+        latestFrame:
+          result.frames.length > 0
+            ? result.frames[result.frames.length - 1]
+            : null,
+        aggregates,
+        log,
+        result,
+        replayIndex:
+          result.frames.length > 0 ? result.frames.length - 1 : null,
+        runGraph: result.designSnapshot,
+        runScenario: scenario,
+      });
     },
   };
 });
