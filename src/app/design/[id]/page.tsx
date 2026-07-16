@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { DesignCanvas } from "@/components/canvas/DesignCanvas";
 import { EventLog } from "@/components/hud/EventLog";
 import { MetricsBar } from "@/components/hud/MetricsBar";
@@ -35,6 +36,12 @@ export default async function DesignPage({
         </main>
         <aside className="flex w-72 shrink-0 flex-col border-l border-neutral-800 bg-neutral-950">
           <div className="flex flex-col gap-6 overflow-y-auto p-3">
+            <Link
+              href={`/review/${id}`}
+              className="flex items-center justify-center gap-2 rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-1.5 text-xs font-medium text-neutral-200 hover:border-neutral-500"
+            >
+              Open review screen →
+            </Link>
             <ScenarioPanel />
             <RequirementsPanel />
             <PhaseNotes />

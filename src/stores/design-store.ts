@@ -51,6 +51,13 @@ interface DesignStore {
   phaseNotes: Record<Phase, string>;
   /** Recorded candidate actions (T-4.3); persisted in the design record. */
   actionLog: ActionEvent[];
+  /**
+   * Graph reference after each recorded action, aligned to `actionLog` by index
+   * (T-4.5 review-screen snapshots). In-memory only — never persisted, reset on
+   * attach/import; empty after a cold reload. Zero-copy: the store never mutates a
+   * graph in place, so each entry just references that action's immutable graph.
+   */
+  actionSnapshots: DesignGraph[];
   onNodesChange: (changes: NodeChange<ComponentFlowNode>[]) => void;
   onEdgesChange: (changes: EdgeChange<ComponentFlowEdge>[]) => void;
   /** Creates a sync edge with full traffic share; duplicate source→target is a no-op. */
@@ -126,6 +133,7 @@ export const useDesignStore = create<DesignStore>((set) => ({
   measured: {},
   phaseNotes: emptyPhaseNotes(),
   actionLog: [],
+  actionSnapshots: [],
 
   onNodesChange: (changes) =>
     set((s) => {
@@ -230,7 +238,10 @@ export const useDesignStore = create<DesignStore>((set) => ({
     set((s) => ({ phaseNotes: { ...s.phaseNotes, [phase]: md } })),
 
   recordAction: (event) =>
-    set((s) => ({ actionLog: [...s.actionLog, event] })),
+    set((s) => ({
+      actionLog: [...s.actionLog, event],
+      actionSnapshots: [...s.actionSnapshots, s.graph],
+    })),
 
   attachDesign: (id) => {
     const record = loadDesign(id);
@@ -244,6 +255,7 @@ export const useDesignStore = create<DesignStore>((set) => ({
         measured: {},
         phaseNotes: record?.phaseNotes ?? emptyPhaseNotes(),
         actionLog: record?.actionLog ?? [],
+        actionSnapshots: [],
       }),
     );
   },
@@ -258,6 +270,7 @@ export const useDesignStore = create<DesignStore>((set) => ({
         measured: {},
         phaseNotes: record.phaseNotes,
         actionLog: record.actionLog,
+        actionSnapshots: [],
       }),
     ),
 
