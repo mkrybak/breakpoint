@@ -6,6 +6,7 @@ import { Verdict } from "@/components/hud/Verdict";
 import { Palette } from "@/components/palette/Palette";
 import { NodeConfigPanel } from "@/components/panels/NodeConfigPanel";
 import { PhaseBar } from "@/components/panels/PhaseBar";
+import { PhaseNotes } from "@/components/panels/PhaseNotes";
 import { RequirementsPanel } from "@/components/panels/RequirementsPanel";
 import { ScenarioPanel } from "@/components/panels/ScenarioPanel";
 
@@ -36,6 +37,7 @@ export default async function DesignPage({
           <div className="flex flex-col gap-6 overflow-y-auto p-3">
             <ScenarioPanel />
             <RequirementsPanel />
+            <PhaseNotes />
           </div>
           <EventLog />
         </aside>

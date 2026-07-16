@@ -6,10 +6,11 @@ import {
   type NodeChange,
 } from "@xyflow/react";
 import { create } from "zustand";
-import type { ComponentKind, DesignEdge, DesignGraph } from "@/lib/core";
+import type { ComponentKind, DesignEdge, DesignGraph, Phase } from "@/lib/core";
 import { getComponentDef } from "@/lib/registry";
 import {
   buildDesignRecord,
+  emptyPhaseNotes,
   loadDesign,
   saveDesign,
   type DesignRecord,
@@ -33,6 +34,8 @@ interface DesignStore {
   selectedEdgeIds: string[];
   /** DOM sizes reported by React Flow — must be echoed back or nodes stay hidden. */
   measured: NodeMeasurements;
+  /** Per-phase markdown notes (T-4.2); persisted in the design record. */
+  phaseNotes: Record<Phase, string>;
   onNodesChange: (changes: NodeChange<ComponentFlowNode>[]) => void;
   onEdgesChange: (changes: EdgeChange<ComponentFlowEdge>[]) => void;
   /** Creates a sync edge with full traffic share; duplicate source→target is a no-op. */
@@ -51,6 +54,8 @@ interface DesignStore {
     value: number | string | boolean,
   ) => void;
   renameNode: (id: string, label: string) => void;
+  /** Phase notes panel (T-4.2): set the markdown note for one phase. */
+  setPhaseNote: (phase: Phase, md: string) => void;
   /** Bind this session to a design id and load its autosaved record, if any. */
   attachDesign: (id: string) => void;
   /** Adopt an imported file's graph + name; the attached designId is kept. */
@@ -89,6 +94,7 @@ export const useDesignStore = create<DesignStore>((set) => ({
   selectedNodeIds: [],
   selectedEdgeIds: [],
   measured: {},
+  phaseNotes: emptyPhaseNotes(),
 
   onNodesChange: (changes) =>
     set((s) => {
@@ -189,6 +195,9 @@ export const useDesignStore = create<DesignStore>((set) => ({
       },
     })),
 
+  setPhaseNote: (phase, md) =>
+    set((s) => ({ phaseNotes: { ...s.phaseNotes, [phase]: md } })),
+
   attachDesign: (id) => {
     const record = loadDesign(id);
     set({
@@ -198,6 +207,7 @@ export const useDesignStore = create<DesignStore>((set) => ({
       selectedNodeIds: [],
       selectedEdgeIds: [],
       measured: {},
+      phaseNotes: record?.phaseNotes ?? emptyPhaseNotes(),
     });
   },
 
@@ -208,6 +218,7 @@ export const useDesignStore = create<DesignStore>((set) => ({
       selectedNodeIds: [],
       selectedEdgeIds: [],
       measured: {},
+      phaseNotes: record.phaseNotes,
     }),
 
   setGraph: (graph) =>
@@ -221,13 +232,19 @@ let autosaveTimer: ReturnType<typeof setTimeout> | undefined;
 // edit — skipping it avoids echo-saving a just-loaded record.
 useDesignStore.subscribe((state, prev) => {
   if (state.designId === null || state.designId !== prev.designId) return;
-  if (state.graph === prev.graph && state.designName === prev.designName) {
+  if (
+    state.graph === prev.graph &&
+    state.designName === prev.designName &&
+    state.phaseNotes === prev.phaseNotes
+  ) {
     return;
   }
   clearTimeout(autosaveTimer);
   autosaveTimer = setTimeout(() => {
     const s = useDesignStore.getState();
     if (s.designId === null) return;
-    saveDesign(buildDesignRecord(s.designId, s.designName, s.graph));
+    saveDesign(
+      buildDesignRecord(s.designId, s.designName, s.graph, s.phaseNotes),
+    );
   }, AUTOSAVE_DELAY_MS);
 });

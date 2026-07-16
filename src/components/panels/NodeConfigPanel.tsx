@@ -22,6 +22,7 @@ export function NodeConfigPanel({ designId }: { designId: string }) {
   const importRecord = useDesignStore((s) => s.importRecord);
   const graph = useDesignStore((s) => s.graph);
   const designName = useDesignStore((s) => s.designName);
+  const phaseNotes = useDesignStore((s) => s.phaseNotes);
   const selectedNodeIds = useDesignStore((s) => s.selectedNodeIds);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [importError, setImportError] = useState<string | null>(null);
@@ -36,7 +37,9 @@ export function NodeConfigPanel({ designId }: { designId: string }) {
       : undefined;
 
   const onExport = () =>
-    exportDesignFile(buildDesignRecord(designId, designName, graph));
+    exportDesignFile(
+      buildDesignRecord(designId, designName, graph, phaseNotes),
+    );
 
   const onImportFile = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];

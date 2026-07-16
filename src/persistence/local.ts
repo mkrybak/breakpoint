@@ -25,18 +25,19 @@ export function emptyPhaseNotes(): Record<Phase, string> {
   return { requirements: "", entities: "", api: "", hld: "", deepdive: "" };
 }
 
-/** Assembles the persisted shape; scenarioId/phaseNotes/actionLog stay empty until M4 wires them. */
+/** Assembles the persisted shape; scenarioId/actionLog stay empty until later M4 tasks wire them. */
 export function buildDesignRecord(
   id: string,
   name: string,
   graph: DesignGraph,
+  phaseNotes: Record<Phase, string> = emptyPhaseNotes(),
 ): DesignRecord {
   return {
     id,
     name,
     scenarioId: "",
     graph,
-    phaseNotes: emptyPhaseNotes(),
+    phaseNotes,
     actionLog: [],
     updatedAt: new Date().toISOString(),
   };

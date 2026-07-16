@@ -77,6 +77,17 @@ describe("buildDesignRecord", () => {
     });
     expect(new Date(record.updatedAt).getTime()).not.toBeNaN();
   });
+
+  it("carries a provided phaseNotes map", () => {
+    const record = buildDesignRecord("d1", "My design", fixtureGraph(), {
+      requirements: "reqs",
+      entities: "",
+      api: "",
+      hld: "",
+      deepdive: "",
+    });
+    expect(record.phaseNotes.requirements).toBe("reqs");
+  });
 });
 
 describe("saveDesign / loadDesign", () => {

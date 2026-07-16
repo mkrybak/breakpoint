@@ -3,6 +3,7 @@ import type { DesignGraph } from "../src/lib/core";
 import {
   buildDesignRecord,
   designStorageKey,
+  emptyPhaseNotes,
 } from "../src/persistence/local";
 import { emptyGraph, useDesignStore } from "../src/stores/design-store";
 import { toFlow } from "../src/stores/flow-adapter";
@@ -76,6 +77,7 @@ beforeEach(() => {
     selectedNodeIds: [],
     selectedEdgeIds: [],
     measured: {},
+    phaseNotes: emptyPhaseNotes(),
   });
 });
 
@@ -261,6 +263,58 @@ describe("design-store", () => {
         graph: { nodes: unknown[] };
       };
       expect(record.graph.nodes).toHaveLength(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("setPhaseNote updates a single phase's note", () => {
+    useDesignStore.getState().setPhaseNote("api", "GET /tweets");
+    const { phaseNotes } = useDesignStore.getState();
+    expect(phaseNotes.api).toBe("GET /tweets");
+    expect(phaseNotes.requirements).toBe("");
+  });
+
+  it("attachDesign loads persisted phase notes", () => {
+    const record = buildDesignRecord("d-notes", "Notes", fixtureGraph(), {
+      requirements: "3 functional reqs",
+      entities: "",
+      api: "",
+      hld: "",
+      deepdive: "",
+    });
+    localStorage.setItem(designStorageKey("d-notes"), JSON.stringify(record));
+
+    useDesignStore.getState().attachDesign("d-notes");
+    expect(useDesignStore.getState().phaseNotes.requirements).toBe(
+      "3 functional reqs",
+    );
+  });
+
+  it("importRecord adopts phase notes", () => {
+    useDesignStore.setState({ designId: "current" });
+    const record = buildDesignRecord("other", "Imported", fixtureGraph(), {
+      requirements: "",
+      entities: "User, Tweet",
+      api: "",
+      hld: "",
+      deepdive: "",
+    });
+    useDesignStore.getState().importRecord(record);
+    expect(useDesignStore.getState().phaseNotes.entities).toBe("User, Tweet");
+  });
+
+  it("autosaves phase-note edits to localStorage", () => {
+    vi.useFakeTimers();
+    try {
+      useDesignStore.getState().attachDesign("d-note-save");
+      useDesignStore.getState().setPhaseNote("hld", "cache in front of db");
+      vi.advanceTimersByTime(600);
+      const stored = localStorage.getItem(designStorageKey("d-note-save"));
+      const record = JSON.parse(stored ?? "{}") as {
+        phaseNotes: { hld: string };
+      };
+      expect(record.phaseNotes.hld).toBe("cache in front of db");
     } finally {
       vi.useRealTimers();
     }
