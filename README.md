@@ -1,36 +1,81 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Breakpoint
 
-## Getting Started
+System design interview platform: draw an architecture on a canvas, run a live
+stress-test simulation against it, and grade the session against a rubric. Fully
+client-side and **stateless** — no accounts, no database, no server state.
+Designs autosave to `localStorage`; runs and graded reviews move between people
+as JSON files.
 
-First, run the development server:
+> **The specs live one level up, outside this repo** (`../01-architecture.md`,
+> `../02-data-model.md`, …) and are the source of truth. This directory (`app/`)
+> is the git repository root and the only thing that deploys.
+
+## Prerequisites
+
+- **Node.js 22+** — production runs on Node 22 (Vercel's default runtime); local
+  dev on Node 20/22/24 all work.
+- npm (bundled with Node). Exact dependency versions are pinned in
+  `package-lock.json`.
+
+## Getting started
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm ci        # install exact locked versions (npm install also works)
+npm run dev   # http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Scripts
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+| Command | What it does |
+|---|---|
+| `npm run dev` | Next dev server at http://localhost:3000 |
+| `npm run build` | Production build |
+| `npm run start` | Serve the production build |
+| `npm run lint` | ESLint + dependency-cruiser engine-boundary check |
+| `npm run typecheck` | `tsc --noEmit` |
+| `npm test` | Vitest suite, including the deterministic golden simulation tests |
+| `npm run sim` | Headless CLI: graph + scenario → verdict (see `examples/`) |
+| `npm run depgraph` | Regenerate `../module-graph.mmd` |
+| `npm run format` | Prettier write |
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Verifying a change
 
-## Learn More
+```bash
+npm run lint && npm run typecheck && npm test
+npm run build   # deploy gate
+```
 
-To learn more about Next.js, take a look at the following resources:
+## Environment variables
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+**None.** The app is entirely client-side and stateless — no database, no auth,
+no API keys, no secrets. Persistence is `localStorage` plus JSON file
+export/import (design bundles and graded reviews). There is nothing to configure
+and nothing to operate.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Continuous integration
 
-## Deploy on Vercel
+`.github/workflows/ci.yml` runs on every push and pull request. On Node 22 — the
+same runtime as production — it runs `npm ci`, then `lint`, `typecheck`, `test`
+(including the golden simulation tests), and `build`. A green run means the
+commit is deployable.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Deploy (Vercel)
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+A zero-config Next.js app — no `vercel.json`. Because the git repository root
+**is** this `app/` directory, Vercel's Root Directory is simply `./`.
+
+First-time setup (one-time, from the Vercel dashboard):
+
+1. Push this repo's `main` branch to a GitHub repository.
+2. On <https://vercel.com/new>, **Import** that GitHub repository.
+3. Vercel auto-detects the **Next.js** preset — leave Build Command
+   (`next build`), Output, and Install Command at their defaults.
+4. **Root Directory:** `./` (the repo root — this `app/` folder).
+5. **Environment Variables:** none.
+6. Click **Deploy**.
+
+After setup, every push to `main` deploys to production and every pull request
+gets a preview URL — no further action. Since there is no server state, there is
+nothing to back up, migrate, or operate.
+
+**Live URL:** _add the production URL here after the first deploy._
