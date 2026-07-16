@@ -1,5 +1,6 @@
 import type { ActionEvent, DesignEdge, DesignGraph, DesignNode, Phase } from "@/lib/core";
 import { COMPONENT_KINDS } from "@/lib/registry";
+import { scorecardStorageKey } from "./scorecard";
 
 /** Persisted/exported design (02-data-model). localStorage key: bp:design:<id>. */
 export interface DesignRecord {
@@ -124,6 +125,55 @@ export function exportDesignFile(record: DesignRecord): void {
   anchor.download = `${slug}.design.json`;
   anchor.click();
   URL.revokeObjectURL(url);
+}
+
+/** All saved designs, most-recently-updated first. Skips unparseable entries. */
+export function listDesigns(): DesignRecord[] {
+  const store = storage();
+  if (!store) return [];
+  const records: DesignRecord[] = [];
+  try {
+    for (let i = 0; i < store.length; i++) {
+      const key = store.key(i);
+      if (key == null || !key.startsWith(KEY_PREFIX)) continue;
+      const text = store.getItem(key);
+      const record = text == null ? null : parseDesignRecord(text);
+      if (record) records.push(record);
+    }
+  } catch {
+    return records;
+  }
+  // ISO timestamps sort lexicographically; newest first.
+  return records.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+}
+
+/** Removes a design and its scorecard (if any). Best-effort. */
+export function deleteDesign(id: string): void {
+  try {
+    const store = storage();
+    store?.removeItem(designStorageKey(id));
+    store?.removeItem(scorecardStorageKey(id));
+  } catch {
+    // deletion must never take the app down
+  }
+}
+
+/**
+ * Renames a saved design and bumps updatedAt. Returns the updated record, or
+ * null if the id is unknown or the trimmed name is blank (no write in that case).
+ */
+export function renameDesign(id: string, name: string): DesignRecord | null {
+  const trimmed = name.trim();
+  if (trimmed === "") return null;
+  const record = loadDesign(id);
+  if (!record) return null;
+  const updated: DesignRecord = {
+    ...record,
+    name: trimmed,
+    updatedAt: new Date().toISOString(),
+  };
+  saveDesign(updated);
+  return updated;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

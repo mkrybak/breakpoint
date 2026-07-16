@@ -2,11 +2,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { DesignGraph } from "../src/lib/core";
 import {
   buildDesignRecord,
+  deleteDesign,
   designStorageKey,
+  listDesigns,
   loadDesign,
   parseDesignRecord,
+  renameDesign,
   saveDesign,
+  type DesignRecord,
 } from "../src/persistence/local";
+import { scorecardStorageKey } from "../src/persistence/scorecard";
 
 function createStorageMock() {
   const data = new Map<string, string>();
@@ -185,5 +190,77 @@ describe("parseDesignRecord", () => {
     expect(parsed?.actionLog).toEqual([
       { t: 1, phase: "hld", kind: "node_added", detail: "added Client" },
     ]);
+  });
+});
+
+function recordAt(id: string, name: string, updatedAt: string): DesignRecord {
+  return {
+    id,
+    name,
+    scenarioId: "",
+    graph: fixtureGraph(),
+    phaseNotes: {
+      requirements: "",
+      entities: "",
+      api: "",
+      hld: "",
+      deepdive: "",
+    },
+    actionLog: [],
+    updatedAt,
+  };
+}
+
+describe("listDesigns", () => {
+  it("returns [] when empty and when localStorage is unavailable", () => {
+    expect(listDesigns()).toEqual([]);
+    vi.unstubAllGlobals();
+    expect(listDesigns()).toEqual([]);
+  });
+
+  it("returns saved designs newest-first, ignoring foreign and broken keys", () => {
+    saveDesign(recordAt("old", "Old", "2026-01-01T00:00:00.000Z"));
+    saveDesign(recordAt("new", "New", "2026-06-01T00:00:00.000Z"));
+    localStorage.setItem(scorecardStorageKey("new"), "{}"); // foreign prefix
+    localStorage.setItem(designStorageKey("bad"), "not json{"); // unparseable
+
+    const ids = listDesigns().map((d) => d.id);
+    expect(ids).toEqual(["new", "old"]);
+  });
+});
+
+describe("deleteDesign", () => {
+  it("removes the design and its scorecard", () => {
+    saveDesign(recordAt("d1", "D1", "2026-01-01T00:00:00.000Z"));
+    localStorage.setItem(scorecardStorageKey("d1"), "{}");
+
+    deleteDesign("d1");
+
+    expect(localStorage.getItem(designStorageKey("d1"))).toBeNull();
+    expect(localStorage.getItem(scorecardStorageKey("d1"))).toBeNull();
+  });
+
+  it("does not throw without localStorage", () => {
+    vi.unstubAllGlobals();
+    expect(() => deleteDesign("d1")).not.toThrow();
+  });
+});
+
+describe("renameDesign", () => {
+  it("renames, bumps updatedAt, and persists", () => {
+    saveDesign(recordAt("d1", "Old name", "2026-01-01T00:00:00.000Z"));
+
+    const updated = renameDesign("d1", "  New name  ");
+
+    expect(updated?.name).toBe("New name");
+    expect(updated?.updatedAt).not.toBe("2026-01-01T00:00:00.000Z");
+    expect(loadDesign("d1")?.name).toBe("New name");
+  });
+
+  it("returns null for an unknown id or a blank name", () => {
+    saveDesign(recordAt("d1", "Keep", "2026-01-01T00:00:00.000Z"));
+    expect(renameDesign("nope", "x")).toBeNull();
+    expect(renameDesign("d1", "   ")).toBeNull();
+    expect(loadDesign("d1")?.name).toBe("Keep"); // unchanged
   });
 });
