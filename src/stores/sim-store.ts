@@ -95,6 +95,24 @@ export function appendLog(
   return next.length > limit ? next.slice(-limit) : next;
 }
 
+/** Event-log line for an interviewer-injected chaos rule. */
+export function describeChaos(rule: StressRule): string {
+  switch (rule.rule) {
+    case "kill":
+      return `⚡ chaos: killed ${rule.count ?? 1} × ${rule.target}`;
+    case "flush":
+      return "⚡ chaos: flushed cache";
+    case "spike":
+      return `⚡ chaos: spike ×${rule.factor}`;
+    case "ramp":
+      return `⚡ chaos: ramp → ${rule.toRps} rps`;
+    case "partition":
+      return `⚡ chaos: partition ${rule.target}`;
+    case "hotkey":
+      return `⚡ chaos: hotkey skew ${rule.skew}`;
+  }
+}
+
 interface SimStore {
   status: SimStatus;
   /** the full run — every streamed frame, kept for replay (T-3.5) */
@@ -107,6 +125,8 @@ interface SimStore {
   log: SimLogEntry[];
   /** verdict + full frames, set when the run completes */
   result: RunResult | null;
+  /** replay: index into `frames` currently shown on the canvas; null = live/last */
+  replayIndex: number | null;
   /** frozen inputs of the active/last run */
   runGraph: DesignGraph | null;
   runScenario: Scenario | null;
@@ -116,6 +136,7 @@ interface SimStore {
   resume: () => void;
   stop: () => void;
   chaos: (rule: StressRule) => void;
+  scrubTo: (index: number) => void;
   reset: () => void;
 }
 
@@ -141,6 +162,7 @@ const IDLE = {
   aggregates: emptyAggregates(),
   log: [] as SimLogEntry[],
   result: null,
+  replayIndex: null,
   runGraph: null,
   runScenario: null,
 };
@@ -161,7 +183,11 @@ export const useSimStore = create<SimStore>((set, get) => {
     } else {
       // "done": the worker's single completion path (finished, stopped, or 0-duration)
       disposeWorker();
-      set({ status: "done", result: msg.result });
+      set((s) => ({
+        status: "done",
+        result: msg.result,
+        replayIndex: s.frames.length > 0 ? s.frames.length - 1 : null,
+      }));
     }
   };
 
@@ -203,6 +229,23 @@ export const useSimStore = create<SimStore>((set, get) => {
       const { status } = get();
       if (status !== "running" && status !== "paused") return;
       handle?.post({ type: "chaos", rule });
+      set((s) => {
+        const entry: SimLogEntry = {
+          t: s.aggregates.elapsedSec,
+          message: describeChaos(rule),
+        };
+        const next = [...s.log, entry];
+        return { log: next.length > LOG_LIMIT ? next.slice(-LOG_LIMIT) : next };
+      });
+    },
+
+    scrubTo: (index) => {
+      const { frames } = get();
+      if (frames.length === 0) return;
+      const clamped = Math.min(Math.max(index, 0), frames.length - 1);
+      // Repoint latestFrame at a past frame — ComponentNode/FlowEdge subscribe to
+      // it, so the canvas re-renders that tick with no change to those components.
+      set({ replayIndex: clamped, latestFrame: frames[clamped] });
     },
 
     reset: () => {

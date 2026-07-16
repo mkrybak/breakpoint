@@ -5,6 +5,7 @@ import type {
   DesignNode,
   Scenario,
   SimFrame,
+  StressRule,
 } from "../src/lib/core";
 import {
   compileRules,
@@ -15,6 +16,7 @@ import {
 } from "../src/lib/simulation";
 import {
   appendLog,
+  describeChaos,
   foldAggregates,
   LOG_LIMIT,
   setSimWorkerFactory,
@@ -245,6 +247,41 @@ describe("sim store", () => {
     expect(s.log.length).toBeLessThanOrEqual(LOG_LIMIT);
     expect(s.frames.length).toBe(20); // full run retained regardless of log cap
   });
+
+  it("scrubTo repoints latestFrame at a past frame and clamps out-of-range", () => {
+    const sc = scenario({ durationSec: 2 });
+    useSimStore.getState().run(small, sc);
+    vi.advanceTimersByTime(2000);
+
+    const frames = useSimStore.getState().frames;
+    expect(useSimStore.getState().status).toBe("done");
+    expect(useSimStore.getState().replayIndex).toBe(frames.length - 1);
+
+    useSimStore.getState().scrubTo(3);
+    expect(useSimStore.getState().replayIndex).toBe(3);
+    expect(useSimStore.getState().latestFrame).toBe(frames[3]);
+
+    useSimStore.getState().scrubTo(999);
+    expect(useSimStore.getState().replayIndex).toBe(frames.length - 1);
+
+    useSimStore.getState().scrubTo(-5);
+    expect(useSimStore.getState().replayIndex).toBe(0);
+    expect(useSimStore.getState().latestFrame).toBe(frames[0]);
+  });
+
+  it("chaos appends a log line at the current sim time", () => {
+    const sc = scenario({ durationSec: 2, baseRps: 100 });
+    useSimStore.getState().run(small, sc);
+    vi.advanceTimersByTime(500); // elapsedSec is now 0.5
+
+    const rule: StressRule = { at: 0, rule: "spike", factor: 3, forSec: 1 };
+    useSimStore.getState().chaos(rule);
+
+    const s = useSimStore.getState();
+    const lastLine = s.log[s.log.length - 1];
+    expect(lastLine.message).toBe(describeChaos(rule));
+    expect(lastLine.t).toBe(s.aggregates.elapsedSec);
+  });
 });
 
 describe("foldAggregates", () => {
@@ -320,5 +357,19 @@ describe("appendLog", () => {
   it("is a no-op for a frame with no events", () => {
     const prev: SimLogEntry[] = [{ t: 0, message: "keep" }];
     expect(appendLog(prev, eventFrame(1, []))).toBe(prev);
+  });
+});
+
+describe("describeChaos", () => {
+  it("labels each interviewer chaos rule", () => {
+    expect(
+      describeChaos({ at: 0, rule: "kill", target: "app_server", count: 2 }),
+    ).toBe("⚡ chaos: killed 2 × app_server");
+    expect(describeChaos({ at: 0, rule: "flush", target: "cache" })).toBe(
+      "⚡ chaos: flushed cache",
+    );
+    expect(
+      describeChaos({ at: 0, rule: "spike", factor: 3, forSec: 5 }),
+    ).toBe("⚡ chaos: spike ×3");
   });
 });

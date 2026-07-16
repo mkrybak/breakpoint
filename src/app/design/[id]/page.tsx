@@ -1,6 +1,7 @@
 import { DesignCanvas } from "@/components/canvas/DesignCanvas";
 import { EventLog } from "@/components/hud/EventLog";
 import { MetricsBar } from "@/components/hud/MetricsBar";
+import { ReplayScrubber } from "@/components/hud/ReplayScrubber";
 import { Verdict } from "@/components/hud/Verdict";
 import { Palette } from "@/components/palette/Palette";
 import { NodeConfigPanel } from "@/components/panels/NodeConfigPanel";
@@ -22,6 +23,9 @@ export default async function DesignPage({
           <DesignCanvas designId={id} />
           <div className="pointer-events-none absolute inset-x-0 top-3 z-10 flex justify-center">
             <Verdict />
+          </div>
+          <div className="pointer-events-none absolute inset-x-0 bottom-3 z-10 flex justify-center">
+            <ReplayScrubber />
           </div>
         </div>
       </main>
