@@ -54,6 +54,8 @@ interface PhaseStore {
   phase: Phase;
   /** Seconds left in the current phase. */
   remainingSec: number;
+  /** Seconds since the interview started; advances one per tick while running (T-4.3 clock). */
+  elapsedSec: number;
   /** Whether the countdown is advancing. */
   running: boolean;
   /** Advance the clock 1s; auto-advances phase at 0; no-op when paused. */
@@ -73,17 +75,24 @@ const FIRST = PHASES[0];
 export const usePhaseStore = create<PhaseStore>((set) => ({
   phase: FIRST.phase,
   remainingSec: FIRST.durationSec,
+  elapsedSec: 0,
   running: true,
 
   tick: () =>
     set((s) => {
       if (!s.running) return {};
+      const elapsedSec = s.elapsedSec + 1;
       const remaining = s.remainingSec - 1;
-      if (remaining > 0) return { remainingSec: remaining };
+      if (remaining > 0) return { remainingSec: remaining, elapsedSec };
       const next = nextPhase(s.phase);
-      if (next) return { phase: next, remainingSec: phaseConfig(next).durationSec };
+      if (next)
+        return {
+          phase: next,
+          remainingSec: phaseConfig(next).durationSec,
+          elapsedSec,
+        };
       // Past the last phase: stop at zero.
-      return { remainingSec: 0, running: false };
+      return { remainingSec: 0, running: false, elapsedSec };
     }),
 
   skip: () =>
@@ -98,5 +107,10 @@ export const usePhaseStore = create<PhaseStore>((set) => ({
   toggleRunning: () => set((s) => ({ running: !s.running })),
 
   reset: () =>
-    set({ phase: FIRST.phase, remainingSec: FIRST.durationSec, running: true }),
+    set({
+      phase: FIRST.phase,
+      remainingSec: FIRST.durationSec,
+      elapsedSec: 0,
+      running: true,
+    }),
 }));

@@ -8,6 +8,8 @@ import type {
 } from "@/lib/core";
 import { createSimWorker } from "@/lib/simulation";
 import type { SimWorkerHandle, WorkerToMain } from "@/lib/simulation";
+import { chaosAction, simRunAction } from "@/lib/actions";
+import { recordInterviewAction } from "@/stores/design-store";
 
 export type SimStatus = "idle" | "running" | "paused" | "done";
 
@@ -204,6 +206,7 @@ export const useSimStore = create<SimStore>((set, get) => {
         runScenario: scenario,
       });
       handle.post({ type: "run", graph, scenario });
+      recordInterviewAction(simRunAction(scenario.name));
     },
 
     pause: () => {
@@ -237,6 +240,7 @@ export const useSimStore = create<SimStore>((set, get) => {
         const next = [...s.log, entry];
         return { log: next.length > LOG_LIMIT ? next.slice(-LOG_LIMIT) : next };
       });
+      recordInterviewAction(chaosAction(rule));
     },
 
     scrubTo: (index) => {

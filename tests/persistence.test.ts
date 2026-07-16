@@ -88,6 +88,14 @@ describe("buildDesignRecord", () => {
     });
     expect(record.phaseNotes.requirements).toBe("reqs");
   });
+
+  it("carries a provided actionLog", () => {
+    const record = buildDesignRecord("d1", "My design", fixtureGraph(), undefined, [
+      { t: 3, phase: "hld", kind: "sim_run", detail: "ran X" },
+    ]);
+    expect(record.actionLog).toHaveLength(1);
+    expect(record.actionLog[0]).toMatchObject({ kind: "sim_run" });
+  });
 });
 
 describe("saveDesign / loadDesign", () => {

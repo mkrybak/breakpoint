@@ -25,12 +25,13 @@ export function emptyPhaseNotes(): Record<Phase, string> {
   return { requirements: "", entities: "", api: "", hld: "", deepdive: "" };
 }
 
-/** Assembles the persisted shape; scenarioId/actionLog stay empty until later M4 tasks wire them. */
+/** Assembles the persisted shape; scenarioId stays empty until a run/export sets it. */
 export function buildDesignRecord(
   id: string,
   name: string,
   graph: DesignGraph,
   phaseNotes: Record<Phase, string> = emptyPhaseNotes(),
+  actionLog: ActionEvent[] = [],
 ): DesignRecord {
   return {
     id,
@@ -38,7 +39,7 @@ export function buildDesignRecord(
     scenarioId: "",
     graph,
     phaseNotes,
-    actionLog: [],
+    actionLog,
     updatedAt: new Date().toISOString(),
   };
 }

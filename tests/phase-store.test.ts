@@ -121,4 +121,20 @@ describe("phase store", () => {
     expect(s.remainingSec).toBe(300);
     expect(s.running).toBe(true);
   });
+
+  it("elapsedSec advances one per running tick and not while paused", () => {
+    usePhaseStore.getState().tick();
+    usePhaseStore.getState().tick();
+    expect(usePhaseStore.getState().elapsedSec).toBe(2);
+
+    usePhaseStore.getState().toggleRunning(); // pause
+    usePhaseStore.getState().tick();
+    expect(usePhaseStore.getState().elapsedSec).toBe(2);
+  });
+
+  it("reset clears the interview clock", () => {
+    usePhaseStore.getState().tick();
+    usePhaseStore.getState().reset();
+    expect(usePhaseStore.getState().elapsedSec).toBe(0);
+  });
 });

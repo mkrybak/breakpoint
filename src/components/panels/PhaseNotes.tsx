@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import type { Phase, Scenario } from "@/lib/core";
-import { useDesignStore } from "@/stores/design-store";
+import { noteEditedAction } from "@/lib/actions";
+import { recordInterviewAction, useDesignStore } from "@/stores/design-store";
 import { phaseConfig, usePhaseStore } from "@/stores/phase-store";
 import { useScenarioStore } from "@/stores/scenario-store";
 
@@ -10,6 +11,7 @@ const HEADING =
   "text-xs font-semibold tracking-wide text-neutral-400 uppercase";
 const TEXTAREA =
   "mt-2 w-full resize-y rounded border border-neutral-700 bg-neutral-800 px-2 py-1.5 font-mono text-xs leading-relaxed text-neutral-100";
+const NOTE_RECORD_DEBOUNCE_MS = 1000;
 
 /** Placeholder prompt per phase — what the candidate should capture there. */
 const PROMPTS: Record<Phase, string> = {
@@ -58,12 +60,26 @@ export function PhaseNotes() {
     seed("requirements", nfrNotesTemplate(useScenarioStore.getState().scenario));
   }, [phase, designId]);
 
+  const recordTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
+    undefined,
+  );
+  useEffect(() => () => clearTimeout(recordTimer.current), []);
+
+  // Debounced: one note_edited per burst of typing (not per keystroke).
+  const onNoteChange = (value: string) => {
+    setPhaseNote(phase, value);
+    clearTimeout(recordTimer.current);
+    recordTimer.current = setTimeout(() => {
+      recordInterviewAction(noteEditedAction());
+    }, NOTE_RECORD_DEBOUNCE_MS);
+  };
+
   return (
     <section>
       <h2 className={HEADING}>Notes — {phaseConfig(phase).label}</h2>
       <textarea
         value={note}
-        onChange={(event) => setPhaseNote(phase, event.target.value)}
+        onChange={(event) => onNoteChange(event.target.value)}
         placeholder={PROMPTS[phase]}
         rows={10}
         spellCheck={false}

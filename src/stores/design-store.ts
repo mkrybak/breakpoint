@@ -6,7 +6,19 @@ import {
   type NodeChange,
 } from "@xyflow/react";
 import { create } from "zustand";
-import type { ComponentKind, DesignEdge, DesignGraph, Phase } from "@/lib/core";
+import type {
+  ActionEvent,
+  ComponentKind,
+  DesignEdge,
+  DesignGraph,
+  Phase,
+} from "@/lib/core";
+import {
+  diffGraph,
+  phaseStartedAction,
+  stampAction,
+  type DraftAction,
+} from "@/lib/actions";
 import { getComponentDef } from "@/lib/registry";
 import {
   buildDesignRecord,
@@ -22,6 +34,7 @@ import {
   type ComponentFlowNode,
   type NodeMeasurements,
 } from "./flow-adapter";
+import { usePhaseStore } from "./phase-store";
 
 const DEFAULT_DESIGN_NAME = "Untitled design";
 
@@ -36,6 +49,8 @@ interface DesignStore {
   measured: NodeMeasurements;
   /** Per-phase markdown notes (T-4.2); persisted in the design record. */
   phaseNotes: Record<Phase, string>;
+  /** Recorded candidate actions (T-4.3); persisted in the design record. */
+  actionLog: ActionEvent[];
   onNodesChange: (changes: NodeChange<ComponentFlowNode>[]) => void;
   onEdgesChange: (changes: EdgeChange<ComponentFlowEdge>[]) => void;
   /** Creates a sync edge with full traffic share; duplicate source→target is a no-op. */
@@ -56,6 +71,8 @@ interface DesignStore {
   renameNode: (id: string, label: string) => void;
   /** Phase notes panel (T-4.2): set the markdown note for one phase. */
   setPhaseNote: (phase: Phase, md: string) => void;
+  /** Append a fully-stamped action event to the log. */
+  recordAction: (event: ActionEvent) => void;
   /** Bind this session to a design id and load its autosaved record, if any. */
   attachDesign: (id: string) => void;
   /** Adopt an imported file's graph + name; the attached designId is kept. */
@@ -87,6 +104,19 @@ function collectMeasurements(nodes: ComponentFlowNode[]): NodeMeasurements {
   return measured;
 }
 
+// Bulk graph replaces (attach/import/setGraph) must not be recorded as candidate
+// edits. Zustand fires subscribers synchronously inside set(), so a module flag
+// toggled around the set() call suppresses the recording subscription below.
+let recordingSuspended = false;
+function withoutRecording(mutate: () => void): void {
+  recordingSuspended = true;
+  try {
+    mutate();
+  } finally {
+    recordingSuspended = false;
+  }
+}
+
 export const useDesignStore = create<DesignStore>((set) => ({
   graph: emptyGraph(),
   designId: null,
@@ -95,6 +125,7 @@ export const useDesignStore = create<DesignStore>((set) => ({
   selectedEdgeIds: [],
   measured: {},
   phaseNotes: emptyPhaseNotes(),
+  actionLog: [],
 
   onNodesChange: (changes) =>
     set((s) => {
@@ -198,32 +229,55 @@ export const useDesignStore = create<DesignStore>((set) => ({
   setPhaseNote: (phase, md) =>
     set((s) => ({ phaseNotes: { ...s.phaseNotes, [phase]: md } })),
 
+  recordAction: (event) =>
+    set((s) => ({ actionLog: [...s.actionLog, event] })),
+
   attachDesign: (id) => {
     const record = loadDesign(id);
-    set({
-      designId: id,
-      designName: record?.name ?? DEFAULT_DESIGN_NAME,
-      graph: record?.graph ?? emptyGraph(),
-      selectedNodeIds: [],
-      selectedEdgeIds: [],
-      measured: {},
-      phaseNotes: record?.phaseNotes ?? emptyPhaseNotes(),
-    });
+    withoutRecording(() =>
+      set({
+        designId: id,
+        designName: record?.name ?? DEFAULT_DESIGN_NAME,
+        graph: record?.graph ?? emptyGraph(),
+        selectedNodeIds: [],
+        selectedEdgeIds: [],
+        measured: {},
+        phaseNotes: record?.phaseNotes ?? emptyPhaseNotes(),
+        actionLog: record?.actionLog ?? [],
+      }),
+    );
   },
 
   importRecord: (record) =>
-    set({
-      graph: record.graph,
-      designName: record.name,
-      selectedNodeIds: [],
-      selectedEdgeIds: [],
-      measured: {},
-      phaseNotes: record.phaseNotes,
-    }),
+    withoutRecording(() =>
+      set({
+        graph: record.graph,
+        designName: record.name,
+        selectedNodeIds: [],
+        selectedEdgeIds: [],
+        measured: {},
+        phaseNotes: record.phaseNotes,
+        actionLog: record.actionLog,
+      }),
+    ),
 
   setGraph: (graph) =>
-    set({ graph, selectedNodeIds: [], selectedEdgeIds: [], measured: {} }),
+    withoutRecording(() =>
+      set({ graph, selectedNodeIds: [], selectedEdgeIds: [], measured: {} }),
+    ),
 }));
+
+/**
+ * Stamp a draft action with the interview clock (phase-store) and append it to the
+ * attached design's log. No-ops when no design is attached, so recording only
+ * happens during a live interview.
+ */
+export function recordInterviewAction(draft: DraftAction): void {
+  const store = useDesignStore.getState();
+  if (store.designId === null) return;
+  const { elapsedSec, phase } = usePhaseStore.getState();
+  store.recordAction(stampAction(draft, elapsedSec, phase));
+}
 
 const AUTOSAVE_DELAY_MS = 500;
 let autosaveTimer: ReturnType<typeof setTimeout> | undefined;
@@ -235,7 +289,8 @@ useDesignStore.subscribe((state, prev) => {
   if (
     state.graph === prev.graph &&
     state.designName === prev.designName &&
-    state.phaseNotes === prev.phaseNotes
+    state.phaseNotes === prev.phaseNotes &&
+    state.actionLog === prev.actionLog
   ) {
     return;
   }
@@ -244,7 +299,29 @@ useDesignStore.subscribe((state, prev) => {
     const s = useDesignStore.getState();
     if (s.designId === null) return;
     saveDesign(
-      buildDesignRecord(s.designId, s.designName, s.graph, s.phaseNotes),
+      buildDesignRecord(
+        s.designId,
+        s.designName,
+        s.graph,
+        s.phaseNotes,
+        s.actionLog,
+      ),
     );
   }, AUTOSAVE_DELAY_MS);
+});
+
+// Record graph mutations (node/edge add-remove, rename, config) as ActionEvents.
+// Diffs prev→next graph, so position drags and selection changes emit nothing.
+// Suspended during bulk replaces (attach/import/setGraph); no-ops with no design.
+useDesignStore.subscribe((state, prev) => {
+  if (recordingSuspended || state.graph === prev.graph) return;
+  for (const draft of diffGraph(prev.graph, state.graph)) {
+    recordInterviewAction(draft);
+  }
+});
+
+// Record interview phase transitions (skip or auto-advance) as phase_started.
+usePhaseStore.subscribe((state, prev) => {
+  if (state.phase === prev.phase) return;
+  recordInterviewAction(phaseStartedAction(state.phase));
 });
