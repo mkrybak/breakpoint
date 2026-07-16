@@ -6,7 +6,9 @@ import {
   getBezierPath,
   type EdgeProps,
 } from "@xyflow/react";
+import { edgeDashDuration, edgeWidth } from "@/components/canvas/sim-visuals";
 import { useDesignStore } from "@/stores/design-store";
+import { useSimStore } from "@/stores/sim-store";
 import type { ComponentFlowEdge } from "@/stores/flow-adapter";
 
 export function FlowEdge({
@@ -22,6 +24,7 @@ export function FlowEdge({
   data,
 }: EdgeProps<ComponentFlowEdge>) {
   const updateEdge = useDesignStore((s) => s.updateEdge);
+  const rps = useSimStore((s) => s.latestFrame?.perEdge[id]?.rps ?? 0);
   const [path, labelX, labelY] = getBezierPath({
     sourceX,
     sourceY,
@@ -33,6 +36,11 @@ export function FlowEdge({
   const share = data?.trafficShare ?? 1;
   const kind = data?.kind ?? "sync";
 
+  const live = rps > 0;
+  const width = live ? edgeWidth(rps) : selected ? 2 : 1.5;
+  // Quantize the animation period so it changes rarely (avoids restart jitter tick-to-tick).
+  const dur = Math.round(edgeDashDuration(rps) * 10) / 10;
+
   return (
     <>
       <BaseEdge
@@ -40,9 +48,11 @@ export function FlowEdge({
         path={path}
         markerEnd={markerEnd}
         style={{
-          stroke: selected ? "#38bdf8" : "#525252",
-          strokeWidth: selected ? 2 : 1.5,
-          strokeDasharray: kind === "async" ? "6 3" : undefined,
+          stroke: selected ? "#38bdf8" : live ? "#737373" : "#525252",
+          strokeWidth: width,
+          strokeDasharray: live ? "8 6" : kind === "async" ? "6 3" : undefined,
+          animation: live ? `sim-flow ${dur}s linear infinite` : undefined,
+          transition: "stroke-width 120ms linear",
         }}
       />
       <EdgeLabelRenderer>

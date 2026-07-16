@@ -5,8 +5,6 @@ export type ComponentNodeData = {
   kind: ComponentKind;
   label: string;
   config: Record<string, number | string | boolean>;
-  /** 0–1; placeholder until the sim engine streams real utilization (M2) */
-  util: number;
 };
 
 export type ComponentFlowNode = Node<ComponentNodeData, "component">;
@@ -36,7 +34,7 @@ export function toFlow(
       id: n.id,
       type: "component" as const,
       position: n.position,
-      data: { kind: n.kind, label: n.label, config: n.config, util: 0 },
+      data: { kind: n.kind, label: n.label, config: n.config },
       selected: selectedNodeIds.includes(n.id),
       measured: measured[n.id],
     })),

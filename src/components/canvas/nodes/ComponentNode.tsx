@@ -1,20 +1,46 @@
+"use client";
+
 import { Handle, Position, type NodeProps } from "@xyflow/react";
 import { ComponentIcon } from "@/components/icons";
+import { STATE_COLOR, formatCount } from "@/components/canvas/sim-visuals";
 import { getComponentDef } from "@/lib/registry";
+import { useSimStore } from "@/stores/sim-store";
 import type { ComponentFlowNode } from "@/stores/flow-adapter";
 
-export function ComponentNode({
-  data,
-  selected,
-}: NodeProps<ComponentFlowNode>) {
+export function ComponentNode({ id, data, selected }: NodeProps<ComponentFlowNode>) {
   const def = getComponentDef(data.kind);
-  const utilPct = Math.round(Math.min(Math.max(data.util, 0), 1) * 100);
+  const live = useSimStore((s) => s.latestFrame?.perNode[id]);
+
+  const state = live?.state ?? "ok";
+  const isDown = state === "down";
+  const isOverloaded = state === "overloaded";
+  const utilPct = Math.round(Math.min(Math.max(live?.util ?? 0, 0), 1) * 100);
+  const barColor = live ? STATE_COLOR[state] : def.color;
+
+  const borderClass = selected
+    ? "border-sky-400"
+    : isDown
+      ? "border-dashed border-neutral-600"
+      : isOverloaded
+        ? "border-red-500"
+        : "border-neutral-700";
+
   return (
     <div
-      className={`w-44 rounded-lg border bg-neutral-900 px-3 py-2 shadow-md ${
-        selected ? "border-sky-400" : "border-neutral-700"
+      className={`relative w-44 rounded-lg border bg-neutral-900 px-3 py-2 shadow-md ${borderClass} ${
+        isDown ? "opacity-50" : ""
       }`}
+      style={
+        isOverloaded
+          ? { animation: "sim-pulse 1s ease-in-out infinite" }
+          : undefined
+      }
     >
+      {live && live.queued > 0 && (
+        <span className="absolute -top-2 -right-2 rounded-full bg-red-500 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-white shadow">
+          {formatCount(live.queued)}
+        </span>
+      )}
       <Handle type="target" position={Position.Left} />
       <div className="flex items-center gap-2">
         <span
@@ -33,8 +59,8 @@ export function ComponentNode({
         </span>
         <div className="h-1 flex-1 rounded-full bg-neutral-800">
           <div
-            className="h-1 rounded-full"
-            style={{ width: `${utilPct}%`, backgroundColor: def.color }}
+            className="h-1 rounded-full transition-all duration-100"
+            style={{ width: `${utilPct}%`, backgroundColor: barColor }}
           />
         </div>
       </div>
