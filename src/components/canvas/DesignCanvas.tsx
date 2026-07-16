@@ -15,6 +15,7 @@ import type { ComponentKind } from "@/lib/core";
 import { COMPONENT_KINDS } from "@/lib/registry";
 import { validateGraph } from "@/lib/validation";
 import { useDesignStore } from "@/stores/design-store";
+import { isCanvasLocked, usePhaseStore } from "@/stores/phase-store";
 import {
   toFlow,
   type ComponentFlowEdge,
@@ -40,6 +41,7 @@ function CanvasInner({ designId }: { designId: string }) {
   const onConnect = useDesignStore((s) => s.onConnect);
   const addNode = useDesignStore((s) => s.addNode);
   const { screenToFlowPosition } = useReactFlow();
+  const locked = usePhaseStore((s) => isCanvasLocked(s.phase));
 
   const { nodes, edges } = useMemo(
     () => toFlow(graph, selectedNodeIds, measured, selectedEdgeIds),
@@ -48,14 +50,19 @@ function CanvasInner({ designId }: { designId: string }) {
 
   const warnings = useMemo(() => validateGraph(graph), [graph]);
 
-  const onDragOver = useCallback((event: DragEvent<HTMLDivElement>) => {
-    if (!event.dataTransfer.types.includes(PALETTE_DND_TYPE)) return;
-    event.preventDefault();
-    event.dataTransfer.dropEffect = "move";
-  }, []);
+  const onDragOver = useCallback(
+    (event: DragEvent<HTMLDivElement>) => {
+      if (locked) return;
+      if (!event.dataTransfer.types.includes(PALETTE_DND_TYPE)) return;
+      event.preventDefault();
+      event.dataTransfer.dropEffect = "move";
+    },
+    [locked],
+  );
 
   const onDrop = useCallback(
     (event: DragEvent<HTMLDivElement>) => {
+      if (locked) return;
       const kind = event.dataTransfer.getData(PALETTE_DND_TYPE);
       if (!isComponentKind(kind)) return;
       event.preventDefault();
@@ -64,7 +71,7 @@ function CanvasInner({ designId }: { designId: string }) {
         screenToFlowPosition({ x: event.clientX, y: event.clientY }),
       );
     },
-    [addNode, screenToFlowPosition],
+    [addNode, screenToFlowPosition, locked],
   );
 
   return (
@@ -74,17 +81,27 @@ function CanvasInner({ designId }: { designId: string }) {
         edges={edges}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
-        onConnect={onConnect}
+        onConnect={locked ? undefined : onConnect}
         onDragOver={onDragOver}
         onDrop={onDrop}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
-        deleteKeyCode={["Backspace", "Delete"]}
+        nodesDraggable={!locked}
+        nodesConnectable={!locked}
+        elementsSelectable={!locked}
+        deleteKeyCode={locked ? null : ["Backspace", "Delete"]}
         fitView
         colorMode="dark"
       >
         <Background />
         <Controls />
+        {locked && (
+          <Panel position="top-center">
+            <div className="rounded-lg border border-amber-500/40 bg-neutral-900/90 px-3 py-1.5 text-xs font-medium text-amber-300">
+              🔒 Canvas unlocks in the High-level design phase
+            </div>
+          </Panel>
+        )}
         {warnings.length > 0 && (
           <Panel position="bottom-left">
             <ul className="max-w-xs space-y-1 rounded-lg border border-amber-500/40 bg-neutral-900/90 p-2">
