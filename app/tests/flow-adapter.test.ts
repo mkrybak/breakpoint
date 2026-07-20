@@ -68,7 +68,11 @@ describe("flow-adapter", () => {
     expect(nodes.every((n) => n.type === "component")).toBe(true);
     expect(edges.every((e) => e.type === "flow")).toBe(true);
     expect(edges[0].selected).toBe(true);
-    expect(edges[0].data).toEqual({ trafficShare: 1, kind: "sync" });
+    expect(edges[0].data).toEqual({
+      trafficShare: 1,
+      kind: "sync",
+      sourceKind: "client",
+    });
   });
 
   it("fromFlow prunes dangling edges", () => {
@@ -209,5 +213,27 @@ describe("flow-adapter", () => {
     expect(result.edges).toEqual([
       { id: "e1", source: "n1", target: "n2", trafficShare: 1, kind: "sync" },
     ]);
+  });
+
+  it("round-trips autoShare and threads sourceKind (T-6.1)", () => {
+    const graph: DesignGraph = {
+      nodes: [
+        { id: "n-lb", kind: "lb", label: "LB", position: { x: 0, y: 0 }, config: {} },
+        { id: "n-a", kind: "app_server", label: "A", position: { x: 100, y: 0 }, config: {} },
+        { id: "n-b", kind: "app_server", label: "B", position: { x: 100, y: 100 }, config: {} },
+      ],
+      edges: [
+        { id: "e-a", source: "n-lb", target: "n-a", trafficShare: 0.5, kind: "sync", autoShare: true },
+        { id: "e-b", source: "n-lb", target: "n-b", trafficShare: 0.5, kind: "sync", autoShare: false },
+      ],
+      entryNodeId: "",
+    };
+
+    const { nodes, edges } = toFlow(graph, []);
+    expect(edges[0].data?.sourceKind).toBe("lb");
+    expect(edges[0].data?.autoShare).toBe(true);
+    expect(edges[1].data?.autoShare).toBe(false);
+    // absent-vs-present autoShare survives the round-trip exactly
+    expect(fromFlow(nodes, edges, "")).toEqual(graph);
   });
 });

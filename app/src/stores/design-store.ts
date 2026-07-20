@@ -60,14 +60,19 @@ interface DesignStore {
   actionSnapshots: DesignGraph[];
   onNodesChange: (changes: NodeChange<ComponentFlowNode>[]) => void;
   onEdgesChange: (changes: EdgeChange<ComponentFlowEdge>[]) => void;
-  /** Creates a sync edge with full traffic share; duplicate source→target is a no-op. */
+  /** Creates a sync edge; lb-source edges are auto-shared and rebalance (T-6.1); duplicate source→target is a no-op. */
   onConnect: (connection: Connection) => void;
   /** Creates a node with registry defaults; returns its id. Used by the palette (T-1.3). */
   addNode: (kind: ComponentKind, position: { x: number; y: number }) => string;
-  /** Edge inspector (T-1.4): patch trafficShare and/or sync-async kind. */
+  /**
+   * Edge inspector (T-1.4): patch trafficShare, sync-async kind, and/or
+   * autoShare (T-6.1). LB-source edges rebalance after the patch, so an auto
+   * edge's trafficShare is always store-computed — to pin a share, pass
+   * autoShare: false alongside it.
+   */
   updateEdge: (
     id: string,
-    patch: Partial<Pick<DesignEdge, "trafficShare" | "kind">>,
+    patch: Partial<Pick<DesignEdge, "trafficShare" | "kind" | "autoShare">>,
   ) => void;
   /** Config panel (T-1.5): set one config key on a node. */
   updateNodeConfig: (
@@ -99,6 +104,33 @@ function defaultConfig(
 
 export function emptyGraph(): DesignGraph {
   return { nodes: [], edges: [], entryNodeId: "" };
+}
+
+/**
+ * T-6.1: recompute one LB's auto outbound shares — auto edges (autoShare !==
+ * false) evenly divide max(0, 1 − Σ manual shares). No-op for non-lb sources
+ * and for LBs with no auto edges, so call sites invoke it unconditionally.
+ * Never called from attachDesign/importRecord/setGraph: loads and imports keep
+ * their stored shares until the next edit.
+ */
+export function rebalanceLb(graph: DesignGraph, sourceNodeId: string): DesignGraph {
+  const node = graph.nodes.find((n) => n.id === sourceNodeId);
+  if (node?.kind !== "lb") return graph;
+  const outbound = graph.edges.filter((e) => e.source === sourceNodeId);
+  const autoCount = outbound.filter((e) => e.autoShare !== false).length;
+  if (autoCount === 0) return graph;
+  const manualSum = outbound
+    .filter((e) => e.autoShare === false)
+    .reduce((acc, e) => acc + e.trafficShare, 0);
+  const share = Math.max(0, 1 - manualSum) / autoCount;
+  return {
+    ...graph,
+    edges: graph.edges.map((e) =>
+      e.source === sourceNodeId && e.autoShare !== false
+        ? { ...e, trafficShare: share }
+        : e,
+    ),
+  };
 }
 
 function collectMeasurements(nodes: ComponentFlowNode[]): NodeMeasurements {
@@ -144,8 +176,22 @@ export const useDesignStore = create<DesignStore>((set) => ({
         s.selectedEdgeIds,
       );
       const nextNodes = applyNodeChanges(changes, nodes);
+      let graph = fromFlow(nextNodes, edges, s.graph.entryNodeId);
+      // fromFlow drops edges whose endpoint was removed (no onEdgesChange
+      // round-trip), so LBs that lost a backend must rebalance here (T-6.1).
+      const removedIds = new Set(
+        changes.filter((c) => c.type === "remove").map((c) => c.id),
+      );
+      if (removedIds.size > 0) {
+        const affectedSources = new Set(
+          s.graph.edges
+            .filter((e) => removedIds.has(e.target) && !removedIds.has(e.source))
+            .map((e) => e.source),
+        );
+        for (const src of affectedSources) graph = rebalanceLb(graph, src);
+      }
       return {
-        graph: fromFlow(nextNodes, edges, s.graph.entryNodeId),
+        graph,
         selectedNodeIds: nextNodes.filter((n) => n.selected).map((n) => n.id),
         measured: collectMeasurements(nextNodes),
       };
@@ -160,8 +206,16 @@ export const useDesignStore = create<DesignStore>((set) => ({
         s.selectedEdgeIds,
       );
       const nextEdges = applyEdgeChanges(changes, edges);
+      let graph = fromFlow(nodes, nextEdges, s.graph.entryNodeId);
+      const removedSources = new Set(
+        changes
+          .filter((c) => c.type === "remove")
+          .map((c) => s.graph.edges.find((e) => e.id === c.id)?.source)
+          .filter((src): src is string => src !== undefined),
+      );
+      for (const src of removedSources) graph = rebalanceLb(graph, src);
       return {
-        graph: fromFlow(nodes, nextEdges, s.graph.entryNodeId),
+        graph,
         selectedEdgeIds: nextEdges.filter((e) => e.selected).map((e) => e.id),
       };
     }),
@@ -172,14 +226,18 @@ export const useDesignStore = create<DesignStore>((set) => ({
         (e) => e.source === connection.source && e.target === connection.target,
       );
       if (duplicate) return {};
+      const sourceIsLb =
+        s.graph.nodes.find((n) => n.id === connection.source)?.kind === "lb";
       const edge: DesignEdge = {
         id: crypto.randomUUID(),
         source: connection.source,
         target: connection.target,
         trafficShare: 1,
         kind: "sync",
+        ...(sourceIsLb ? { autoShare: true } : {}),
       };
-      return { graph: { ...s.graph, edges: [...s.graph.edges, edge] } };
+      const graph = { ...s.graph, edges: [...s.graph.edges, edge] };
+      return { graph: rebalanceLb(graph, connection.source) };
     }),
 
   addNode: (kind, position) => {
@@ -207,14 +265,17 @@ export const useDesignStore = create<DesignStore>((set) => ({
   },
 
   updateEdge: (id, patch) =>
-    set((s) => ({
-      graph: {
+    set((s) => {
+      const target = s.graph.edges.find((e) => e.id === id);
+      if (!target) return {};
+      const graph = {
         ...s.graph,
         edges: s.graph.edges.map((e) =>
           e.id === id ? { ...e, ...patch } : e,
         ),
-      },
-    })),
+      };
+      return { graph: rebalanceLb(graph, target.source) };
+    }),
 
   updateNodeConfig: (id, key, value) =>
     set((s) => ({

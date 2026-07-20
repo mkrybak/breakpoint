@@ -35,6 +35,8 @@ export function FlowEdge({
   });
   const share = data?.trafficShare ?? 1;
   const kind = data?.kind ?? "sync";
+  const isLbSource = data?.sourceKind === "lb";
+  const isAuto = isLbSource && data?.autoShare !== false;
 
   const live = rps > 0;
   const width = live ? edgeWidth(rps) : selected ? 2 : 1.5;
@@ -73,13 +75,36 @@ export function FlowEdge({
                 onChange={(event) => {
                   const next = event.target.valueAsNumber;
                   if (Number.isNaN(next)) return;
-                  updateEdge(id, {
-                    trafficShare: Math.min(Math.max(next, 0), 1),
-                  });
+                  const trafficShare = Math.min(Math.max(next, 0), 1);
+                  updateEdge(
+                    id,
+                    isLbSource
+                      ? { autoShare: false, trafficShare }
+                      : { trafficShare },
+                  );
                 }}
                 aria-label="Traffic share"
                 className="w-14 rounded border border-neutral-700 bg-neutral-800 px-1 py-0.5 text-xs text-neutral-100"
               />
+              {isLbSource && (
+                <label className="flex items-center gap-1 text-xs text-neutral-300">
+                  <input
+                    type="checkbox"
+                    checked={isAuto}
+                    onChange={(event) =>
+                      updateEdge(
+                        id,
+                        event.target.checked
+                          ? { autoShare: true }
+                          : { autoShare: false, trafficShare: share },
+                      )
+                    }
+                    aria-label="Auto share"
+                    className="accent-sky-500"
+                  />
+                  auto
+                </label>
+              )}
               <select
                 value={kind}
                 onChange={(event) =>
@@ -97,6 +122,7 @@ export function FlowEdge({
           ) : (
             <span className="rounded bg-neutral-900/90 px-1.5 py-0.5 font-mono text-[10px] text-neutral-400">
               {Math.round(share * 100)}%
+              {isAuto ? " · auto" : ""}
               {kind === "async" ? " · async" : ""}
             </span>
           )}

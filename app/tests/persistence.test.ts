@@ -353,3 +353,28 @@ describe("parseRunBundle", () => {
     if (!badScenario.ok) expect(badScenario.error).toMatch(/scenario/i);
   });
 });
+
+describe("autoShare import (T-6.1)", () => {
+  it("accepts edges with and without autoShare — no migration", () => {
+    const graph = fixtureGraph();
+    graph.edges[0].autoShare = false;
+    const withFlag = parseDesignRecord(
+      JSON.stringify(buildDesignRecord("d1", "Design", graph)),
+    );
+    expect(withFlag?.graph.edges[0].autoShare).toBe(false);
+
+    const absent = parseDesignRecord(
+      JSON.stringify(buildDesignRecord("d2", "Design", fixtureGraph())),
+    );
+    expect(absent).not.toBeNull();
+    expect(absent?.graph.edges[0].autoShare).toBeUndefined();
+  });
+
+  it("rejects a non-boolean autoShare", () => {
+    const raw = JSON.parse(
+      JSON.stringify(buildDesignRecord("d1", "Design", fixtureGraph())),
+    ) as { graph: { edges: Record<string, unknown>[] } };
+    raw.graph.edges[0].autoShare = "yes";
+    expect(parseDesignRecord(JSON.stringify(raw))).toBeNull();
+  });
+});

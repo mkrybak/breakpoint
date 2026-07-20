@@ -220,6 +220,7 @@ function isValidEdge(value: unknown): value is DesignEdge {
     typeof value.source === "string" &&
     typeof value.target === "string" &&
     isFiniteNumber(value.trafficShare) &&
+    (value.autoShare === undefined || typeof value.autoShare === "boolean") &&
     (value.kind === "sync" || value.kind === "async")
   );
 }

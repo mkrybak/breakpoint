@@ -9,7 +9,14 @@ export type ComponentNodeData = {
 
 export type ComponentFlowNode = Node<ComponentNodeData, "component">;
 
-export type FlowEdgeData = { trafficShare: number; kind: "sync" | "async" };
+export type FlowEdgeData = {
+  trafficShare: number;
+  kind: "sync" | "async";
+  /** T-6.1: only meaningful when sourceKind is "lb"; absent === true (auto). */
+  autoShare?: boolean;
+  /** Source node's kind — lets FlowEdge branch on lb without a store lookup. */
+  sourceKind?: ComponentKind;
+};
 
 export type ComponentFlowEdge = Edge<FlowEdgeData, "flow">;
 
@@ -29,6 +36,7 @@ export function toFlow(
   measured: NodeMeasurements = {},
   selectedEdgeIds: string[] = [],
 ): { nodes: ComponentFlowNode[]; edges: ComponentFlowEdge[] } {
+  const kindById = new Map(graph.nodes.map((n) => [n.id, n.kind]));
   return {
     nodes: graph.nodes.map((n) => ({
       id: n.id,
@@ -45,7 +53,12 @@ export function toFlow(
       target: e.target,
       selected: selectedEdgeIds.includes(e.id),
       markerEnd: { type: MarkerType.ArrowClosed, color: "#525252" },
-      data: { trafficShare: e.trafficShare, kind: e.kind },
+      data: {
+        trafficShare: e.trafficShare,
+        kind: e.kind,
+        autoShare: e.autoShare,
+        sourceKind: kindById.get(e.source),
+      },
     })),
   };
 }
@@ -72,6 +85,9 @@ export function fromFlow(
         target: e.target,
         trafficShare: e.data?.trafficShare ?? 1,
         kind: e.data?.kind ?? "sync",
+        ...(e.data?.autoShare !== undefined
+          ? { autoShare: e.data.autoShare }
+          : {}),
       })),
     entryNodeId: resolveEntryNodeId(nodes, previousEntryNodeId),
   };

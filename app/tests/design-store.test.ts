@@ -185,14 +185,18 @@ describe("design-store", () => {
     expect(useDesignStore.getState().graph.edges).toHaveLength(3);
   });
 
-  it("updateEdge patches trafficShare and kind", () => {
+  it("updateEdge patches trafficShare, kind, and autoShare", () => {
     useDesignStore
       .getState()
-      .updateEdge("e-lb-app", { trafficShare: 0.5, kind: "async" });
+      .updateEdge("e-lb-app", { autoShare: false, trafficShare: 0.5, kind: "async" });
     const edge = useDesignStore
       .getState()
       .graph.edges.find((e) => e.id === "e-lb-app");
-    expect(edge).toMatchObject({ trafficShare: 0.5, kind: "async" });
+    expect(edge).toMatchObject({
+      trafficShare: 0.5,
+      kind: "async",
+      autoShare: false,
+    });
   });
 
   it("tracks edge selection", () => {
@@ -318,5 +322,124 @@ describe("design-store", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe("auto-balancing lb (T-6.1)", () => {
+  /** Wire a second backend onto the fixture's n-lb; returns the new ids. */
+  function connectSecondBackend(): { newEdgeId: string; backendId: string } {
+    const store = useDesignStore.getState();
+    const backendId = store.addNode("app_server", { x: 520, y: 400 });
+    store.onConnect({
+      source: "n-lb",
+      target: backendId,
+      sourceHandle: null,
+      targetHandle: null,
+    });
+    const newEdge = useDesignStore
+      .getState()
+      .graph.edges.find((e) => e.target === backendId);
+    if (!newEdge) throw new Error("edge not created");
+    return { newEdgeId: newEdge.id, backendId };
+  }
+
+  function edge(id: string) {
+    return useDesignStore.getState().graph.edges.find((e) => e.id === id);
+  }
+
+  it("splits evenly when a backend is connected", () => {
+    const { newEdgeId } = connectSecondBackend();
+    expect(edge("e-lb-app")?.trafficShare).toBeCloseTo(0.5, 10);
+    expect(edge(newEdgeId)).toMatchObject({ trafficShare: 0.5, autoShare: true });
+  });
+
+  it("rebalances when a backend edge is removed", () => {
+    const { newEdgeId } = connectSecondBackend();
+    useDesignStore.getState().onEdgesChange([{ id: newEdgeId, type: "remove" }]);
+    expect(edge(newEdgeId)).toBeUndefined();
+    expect(edge("e-lb-app")?.trafficShare).toBeCloseTo(1, 10);
+  });
+
+  it("rebalances when a backend node is deleted (fromFlow cascade)", () => {
+    const { backendId } = connectSecondBackend();
+    useDesignStore.getState().onNodesChange([{ id: backendId, type: "remove" }]);
+    const { graph } = useDesignStore.getState();
+    expect(graph.edges.filter((e) => e.source === "n-lb")).toHaveLength(1);
+    expect(edge("e-lb-app")?.trafficShare).toBeCloseTo(1, 10);
+  });
+
+  it("manual override takes a fixed slice; auto edges divide the rest", () => {
+    const { newEdgeId } = connectSecondBackend();
+    useDesignStore
+      .getState()
+      .updateEdge("e-lb-app", { autoShare: false, trafficShare: 0.3 });
+    expect(edge("e-lb-app")).toMatchObject({ trafficShare: 0.3, autoShare: false });
+    expect(edge(newEdgeId)?.trafficShare).toBeCloseTo(0.7, 10);
+  });
+
+  it("resetting to auto re-splits evenly", () => {
+    const { newEdgeId } = connectSecondBackend();
+    useDesignStore
+      .getState()
+      .updateEdge("e-lb-app", { autoShare: false, trafficShare: 0.3 });
+    useDesignStore.getState().updateEdge("e-lb-app", { autoShare: true });
+    expect(edge("e-lb-app")?.trafficShare).toBeCloseTo(0.5, 10);
+    expect(edge(newEdgeId)?.trafficShare).toBeCloseTo(0.5, 10);
+  });
+
+  it("clamps auto edges to 0 when manual shares consume everything", () => {
+    const { newEdgeId } = connectSecondBackend();
+    useDesignStore
+      .getState()
+      .updateEdge("e-lb-app", { autoShare: false, trafficShare: 1 });
+    expect(edge(newEdgeId)?.trafficShare).toBe(0);
+  });
+
+  it("leaves non-lb fan-out untouched", () => {
+    // n-client already has one outbound edge at share 1; add a second.
+    useDesignStore.getState().onConnect({
+      source: "n-client",
+      target: "n-app",
+      sourceHandle: null,
+      targetHandle: null,
+    });
+    const outbound = useDesignStore
+      .getState()
+      .graph.edges.filter((e) => e.source === "n-client");
+    expect(outbound).toHaveLength(2);
+    for (const e of outbound) {
+      expect(e.trafficShare).toBe(1);
+      expect(e.autoShare).toBeUndefined();
+    }
+  });
+
+  it("never rebalances on importRecord or attachDesign", () => {
+    const skewed = fixtureGraph();
+    // Two auto (absent) lb edges deliberately not summing to 1.
+    skewed.edges = [
+      ...skewed.edges,
+      {
+        id: "e-lb-app2",
+        source: "n-lb",
+        target: "n-app",
+        trafficShare: 0.9,
+        kind: "sync" as const,
+      },
+    ];
+
+    useDesignStore.setState({ designId: "current" });
+    useDesignStore
+      .getState()
+      .importRecord(buildDesignRecord("other", "Imported", skewed));
+    expect(edge("e-lb-app")?.trafficShare).toBe(1);
+    expect(edge("e-lb-app2")?.trafficShare).toBe(0.9);
+
+    localStorage.setItem(
+      designStorageKey("d-skew"),
+      JSON.stringify(buildDesignRecord("d-skew", "Skew", skewed)),
+    );
+    useDesignStore.getState().attachDesign("d-skew");
+    expect(edge("e-lb-app")?.trafficShare).toBe(1);
+    expect(edge("e-lb-app2")?.trafficShare).toBe(0.9);
   });
 });
