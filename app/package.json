@@ -1,0 +1,39 @@
+{
+  "name": "app",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint && depcruise src tests scripts",
+    "depgraph": "depcruise src --config .dependency-cruiser.cjs --output-type mermaid --output-to ../module-graph.mmd",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "sim": "tsx scripts/sim.ts",
+    "format": "prettier --write ."
+  },
+  "dependencies": {
+    "@xyflow/react": "^12.11.2",
+    "lucide-react": "^1.24.0",
+    "next": "16.2.10",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "zustand": "^5.0.14"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "dependency-cruiser": "^18.1.0",
+    "eslint": "^9",
+    "eslint-config-next": "16.2.10",
+    "eslint-config-prettier": "^10.1.8",
+    "prettier": "^3.9.5",
+    "tailwindcss": "^4",
+    "tsx": "^4.23.1",
+    "typescript": "^5",
+    "vitest": "^4.1.10"
+  }
+}

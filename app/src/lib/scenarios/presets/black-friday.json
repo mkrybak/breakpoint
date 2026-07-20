@@ -1,0 +1,14 @@
+{
+  "id": "black-friday",
+  "name": "Black Friday",
+  "description": "Checkout traffic ramps through the morning, then a lightning-deal spike.",
+  "durationSec": 60,
+  "baseRps": 5000,
+  "readRatio": 0.9,
+  "timeline": [
+    { "at": 10, "rule": "ramp", "toRps": 20000, "overSec": 20 },
+    { "at": 45, "rule": "spike", "factor": 1.5, "forSec": 10 }
+  ],
+  "pass": { "p95Ms": 250, "maxErrorRate": 0.01 },
+  "seed": 42
+}
