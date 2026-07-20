@@ -10,6 +10,7 @@ import { PhaseBar } from "@/components/panels/PhaseBar";
 import { PhaseNotes } from "@/components/panels/PhaseNotes";
 import { RequirementsPanel } from "@/components/panels/RequirementsPanel";
 import { ScenarioPanel } from "@/components/panels/ScenarioPanel";
+import { SmallScreenNotice } from "@/components/layout/SmallScreenNotice";
 
 export default async function DesignPage({
   params,
@@ -19,8 +20,10 @@ export default async function DesignPage({
   const { id } = await params;
   return (
     <div className="flex h-dvh flex-col">
-      <PhaseBar />
-      <div className="flex min-h-0 flex-1">
+      <SmallScreenNotice />
+      <div className="flex min-h-0 flex-1 flex-col">
+        <PhaseBar />
+        <div className="flex min-h-0 flex-1">
         <Palette />
         <main className="flex min-w-0 flex-1 flex-col">
           <MetricsBar />
@@ -49,6 +52,7 @@ export default async function DesignPage({
           <EventLog />
         </aside>
         <NodeConfigPanel designId={id} />
+        </div>
       </div>
     </div>
   );

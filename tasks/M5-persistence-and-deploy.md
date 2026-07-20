@@ -1,6 +1,6 @@
 ---
 tags: [milestone]
-status: planning
+status: done
 milestone: M5
 depends-on: M4
 ---
@@ -38,7 +38,7 @@ Deviation: the Files list names only `src/persistence/local.ts` and `src/compone
 Deviation: workflow lives at `app/.github/workflows/ci.yml` (git root is `app/`, not the vault root); README rewritten wholesale. "Host config" = zero-config Vercel — no `vercel.json`, host setup is a dashboard runbook in the README instead, since deploying is account-bound and manual (no git remote configured yet). `next.config.ts` intentionally left untouched (Next 16's `next build` no longer lints, so no double-lint concern). CI targets Node 22 to match Vercel's runtime. No engine boundary or app code touched. The actual push-to-GitHub and Vercel import (which produce the live URL) are outstanding manual user steps.
 
 ### T-5.4 — Polish pass
-- [ ] T-5.4 done
+- [x] T-5.4 done
 
 **Files:** various
 **Accept:** Landing page with scenario cards; empty states; error boundaries; mobile at least readable; run through full flow twice with fresh eyes and file bugs as new checkboxes here.

@@ -102,6 +102,13 @@ function CanvasInner({ designId }: { designId: string }) {
             </div>
           </Panel>
         )}
+        {!locked && graph.nodes.length === 0 && (
+          <Panel position="top-center">
+            <div className="rounded-lg border border-neutral-700 bg-neutral-900/90 px-3 py-1.5 text-xs font-medium text-neutral-400">
+              Drag a component from the palette to start designing
+            </div>
+          </Panel>
+        )}
         {warnings.length > 0 && (
           <Panel position="bottom-left">
             <ul className="max-w-xs space-y-1 rounded-lg border border-amber-500/40 bg-neutral-900/90 p-2">

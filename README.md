@@ -39,7 +39,7 @@ The design is not a drawing — it's a typed graph (React Flow JSON). That makes
 - [ ] [[tasks/M2-simulation-engine\|M2 — Simulation engine]]
 - [ ] [[tasks/M3-stress-scenarios\|M3 — Stress scenarios & realtime viz]]
 - [ ] [[tasks/M4-interview-flow\|M4 — Interview flow & human grading]]
-- [ ] [[tasks/M5-persistence-and-deploy\|M5 — Export/import & deploy]]
+- [x] [[tasks/M5-persistence-and-deploy\|M5 — Export/import & deploy]] ✅ 2026-07-19
 
 ## Conventions
 

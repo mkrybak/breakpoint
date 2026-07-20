@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Check, Pencil, Plus, Trash2, X } from "lucide-react";
+import { ScenarioCards } from "@/components/landing/ScenarioCards";
 import {
   buildDesignRecord,
   deleteDesign,
@@ -91,12 +92,19 @@ export function LandingScreen() {
           </button>
         </div>
 
+        <ScenarioCards />
+
         {designs === null ? (
           <p className="text-sm text-neutral-500">Loading…</p>
         ) : designs.length === 0 ? (
-          <p className="text-sm text-neutral-500">
-            No saved designs yet — create one above to start.
-          </p>
+          <div className={`${CARD} px-4 py-8 text-center`}>
+            <p className="text-sm font-medium text-neutral-300">
+              No saved designs yet
+            </p>
+            <p className="mt-1 text-xs text-neutral-500">
+              Name one above and hit “New design” to open the canvas.
+            </p>
+          </div>
         ) : (
           <ul className="flex flex-col gap-2">
             {designs.map((d) => (
