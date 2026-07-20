@@ -12,6 +12,10 @@ concurrency:
 jobs:
   verify:
     runs-on: ubuntu-latest
+    # The Next.js app lives in app/ (repo root is the vault); run everything there.
+    defaults:
+      run:
+        working-directory: app
     steps:
       - uses: actions/checkout@v4
 
@@ -19,6 +23,7 @@ jobs:
         with:
           node-version: 22 # matches Vercel's production runtime
           cache: npm
+          cache-dependency-path: app/package-lock.json
 
       - name: Install dependencies
         run: npm ci

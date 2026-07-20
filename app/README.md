@@ -61,8 +61,9 @@ commit is deployable.
 
 ## Deploy (Vercel)
 
-A zero-config Next.js app — no `vercel.json`. Because the git repository root
-**is** this `app/` directory, Vercel's Root Directory is simply `./`.
+A zero-config Next.js app — no `vercel.json`. The git repository root is the
+vault (one level up); this Next.js app lives in `app/`, so Vercel's Root
+Directory is **`app`**.
 
 First-time setup (one-time, from the Vercel dashboard):
 
@@ -70,7 +71,7 @@ First-time setup (one-time, from the Vercel dashboard):
 2. On <https://vercel.com/new>, **Import** that GitHub repository.
 3. Vercel auto-detects the **Next.js** preset — leave Build Command
    (`next build`), Output, and Install Command at their defaults.
-4. **Root Directory:** `./` (the repo root — this `app/` folder).
+4. **Root Directory:** `app` (this folder — the repo root is one level up).
 5. **Environment Variables:** none.
 6. Click **Deploy**.
 
