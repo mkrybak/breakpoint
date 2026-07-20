@@ -1,0 +1,164 @@
+flowchart LR
+
+subgraph 0["src"]
+subgraph 1["app"]
+subgraph 2["design"]
+subgraph 3["[id]"]
+4["page.tsx"]
+end
+end
+1F["layout.tsx"]
+1G["globals.css"]
+1O["page.tsx"]
+end
+subgraph 5["components"]
+subgraph 6["canvas"]
+7["DesignCanvas.tsx"]
+subgraph H["edges"]
+I["FlowEdge.tsx"]
+end
+subgraph 10["nodes"]
+11["ComponentNode.tsx"]
+end
+end
+12["icons.tsx"]
+subgraph 17["palette"]
+18["Palette.tsx"]
+end
+subgraph 1D["panels"]
+1E["NodeConfigPanel.tsx"]
+end
+end
+subgraph J["stores"]
+K["design-store.ts"]
+N["flow-adapter.ts"]
+end
+subgraph O["lib"]
+subgraph P["core"]
+Q["index.ts"]
+R["action.ts"]
+S["component.ts"]
+T["design.ts"]
+end
+subgraph U["registry"]
+V["index.ts"]
+W["components.ts"]
+X["types.ts"]
+end
+subgraph 19["validation"]
+1A["index.ts"]
+1B["checks.ts"]
+1C["types.ts"]
+end
+subgraph 1Q["actions"]
+1R["index.ts"]
+end
+subgraph 1S["grading"]
+1T["index.ts"]
+end
+subgraph 1U["scenarios"]
+1V["index.ts"]
+end
+subgraph 1W["simulation"]
+1X["index.ts"]
+end
+end
+subgraph Y["persistence"]
+Z["local.ts"]
+end
+end
+subgraph 8["node_modules"]
+subgraph 9["@xyflow"]
+subgraph A["react"]
+subgraph B["dist"]
+subgraph C["umd"]
+D["index.js"]
+end
+E["style.css"]
+end
+end
+end
+subgraph F["react"]
+G["index.js"]
+end
+subgraph L["zustand"]
+M["index.js"]
+end
+subgraph 13["lucide-react"]
+subgraph 14["dist"]
+subgraph 15["cjs"]
+16["lucide-react.js"]
+end
+end
+end
+subgraph 1H["next"]
+subgraph 1I["dist"]
+subgraph 1J["server"]
+1K["next.js"]
+end
+end
+subgraph 1L["font"]
+subgraph 1M["google"]
+1N["index.js"]
+end
+end
+1P["image.js"]
+end
+end
+4-->7
+4-->18
+4-->1E
+7-->I
+7-->11
+7-->18
+7-->Q
+7-->V
+7-->1A
+7-->K
+7-->N
+7-->D
+7-->E
+7-->G
+I-->K
+I-->N
+I-->D
+K-->N
+K-->Q
+K-->V
+K-->Z
+K-->D
+K-->M
+N-->Q
+N-->D
+Q-->R
+Q-->S
+Q-->T
+T-->S
+V-->W
+V-->X
+W-->X
+X-->Q
+Z-->Q
+Z-->V
+11-->12
+11-->V
+11-->N
+11-->D
+12-->16
+18-->12
+18-->V
+18-->G
+1A-->1B
+1A-->1C
+1B-->1C
+1B-->Q
+1C-->Q
+1E-->Q
+1E-->V
+1E-->Z
+1E-->K
+1E-->G
+1F-->1G
+1F-->1K
+1F-->1N
+1O-->1P
