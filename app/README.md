@@ -79,4 +79,4 @@ After setup, every push to `main` deploys to production and every pull request
 gets a preview URL — no further action. Since there is no server state, there is
 nothing to back up, migrate, or operate.
 
-**Live URL:** _add the production URL here after the first deploy._
+**Live URL:** <https://breakpoint-topaz.vercel.app/>

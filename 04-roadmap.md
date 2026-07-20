@@ -1,6 +1,6 @@
 ---
 tags: [roadmap]
-status: planning
+status: done
 ---
 
 # 04 — Roadmap
