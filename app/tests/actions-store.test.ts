@@ -97,6 +97,7 @@ describe("action recording", () => {
       "loaded",
       "Loaded",
       { nodes: [], edges: [], entryNodeId: "" },
+      "practice",
       undefined,
       [event],
     );
@@ -117,6 +118,7 @@ describe("action recording", () => {
         edges: [],
         entryNodeId: "n1",
       },
+      "practice",
       undefined,
       [],
     );

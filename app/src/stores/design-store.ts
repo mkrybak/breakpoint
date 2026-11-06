@@ -22,9 +22,11 @@ import {
 import { getComponentDef } from "@/lib/registry";
 import {
   buildDesignRecord,
+  DEFAULT_DESIGN_MODE,
   emptyPhaseNotes,
   loadDesign,
   saveDesign,
+  type DesignMode,
   type DesignRecord,
 } from "@/persistence/local";
 import {
@@ -43,6 +45,11 @@ interface DesignStore {
   /** localStorage slot this session autosaves to; null until a page attaches. */
   designId: string | null;
   designName: string;
+  /**
+   * Mode of the attached design (T-7.2). Set only by attachDesign; importRecord
+   * keeps it (importing never converts a mode). Meaningful once designId is set.
+   */
+  designMode: DesignMode;
   selectedNodeIds: string[];
   selectedEdgeIds: string[];
   /** DOM sizes reported by React Flow — must be echoed back or nodes stay hidden. */
@@ -87,7 +94,7 @@ interface DesignStore {
   recordAction: (event: ActionEvent) => void;
   /** Bind this session to a design id and load its autosaved record, if any. */
   attachDesign: (id: string) => void;
-  /** Adopt an imported file's graph + name; the attached designId is kept. */
+  /** Adopt an imported file's graph, name, notes and log; the attached designId and designMode are kept (in-place import never converts a mode). */
   importRecord: (record: DesignRecord) => void;
   setGraph: (graph: DesignGraph) => void;
 }
@@ -160,6 +167,7 @@ export const useDesignStore = create<DesignStore>((set) => ({
   graph: emptyGraph(),
   designId: null,
   designName: DEFAULT_DESIGN_NAME,
+  designMode: DEFAULT_DESIGN_MODE,
   selectedNodeIds: [],
   selectedEdgeIds: [],
   measured: {},
@@ -310,6 +318,7 @@ export const useDesignStore = create<DesignStore>((set) => ({
       set({
         designId: id,
         designName: record?.name ?? DEFAULT_DESIGN_NAME,
+        designMode: record?.mode ?? DEFAULT_DESIGN_MODE,
         graph: record?.graph ?? emptyGraph(),
         selectedNodeIds: [],
         selectedEdgeIds: [],
@@ -377,6 +386,7 @@ useDesignStore.subscribe((state, prev) => {
         s.designId,
         s.designName,
         s.graph,
+        s.designMode,
         s.phaseNotes,
         s.actionLog,
       ),

@@ -13,10 +13,18 @@ import { COMPONENT_KINDS } from "@/lib/registry";
 import { parseScenario } from "@/lib/scenarios";
 import { parseScorecard, scorecardStorageKey } from "./scorecard";
 
+/** Product mode (product-modes spec). Shell-only: engines never see it. */
+export type DesignMode = "quick" | "practice" | "interview";
+export const DESIGN_MODES: readonly DesignMode[] = ["quick", "practice", "interview"];
+/** Records saved before modes existed, and files without the field, load as this. */
+export const DEFAULT_DESIGN_MODE: DesignMode = "practice";
+
 /** Persisted/exported design (02-data-model). localStorage key: bp:design:<id>. */
 export interface DesignRecord {
   id: string;
   name: string;
+  /** Fixed for the design's life; in-place imports never change it. */
+  mode: DesignMode;
   scenarioId: string;
   graph: DesignGraph;
   phaseNotes: Record<Phase, string>;
@@ -42,12 +50,14 @@ export function buildDesignRecord(
   id: string,
   name: string,
   graph: DesignGraph,
+  mode: DesignMode,
   phaseNotes: Record<Phase, string> = emptyPhaseNotes(),
   actionLog: ActionEvent[] = [],
 ): DesignRecord {
   return {
     id,
     name,
+    mode,
     scenarioId: "",
     graph,
     phaseNotes,
@@ -81,7 +91,8 @@ export function loadDesign(id: string): DesignRecord | null {
 /**
  * Hand-rolled import guard (02-data-model): strict on the graph — an unknown
  * node kind would crash the canvas — forgiving on the rest, so files missing
- * M4-era fields still load with defaults.
+ * M4-era fields still load with defaults. A missing or unknown `mode` loads as
+ * `"practice"` (no migration).
  */
 export function parseDesignRecord(text: string): DesignRecord | null {
   let value: unknown;
@@ -107,6 +118,7 @@ export function parseDesignRecord(text: string): DesignRecord | null {
   return {
     id: value.id,
     name: value.name,
+    mode: isDesignMode(value.mode) ? value.mode : DEFAULT_DESIGN_MODE,
     scenarioId: typeof value.scenarioId === "string" ? value.scenarioId : "",
     graph: value.graph,
     phaseNotes,
@@ -189,6 +201,10 @@ export function renameDesign(id: string, name: string): DesignRecord | null {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isDesignMode(value: unknown): value is DesignMode {
+  return (DESIGN_MODES as readonly unknown[]).includes(value);
 }
 
 function isFiniteNumber(value: unknown): value is number {

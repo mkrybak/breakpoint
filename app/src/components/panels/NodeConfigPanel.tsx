@@ -22,6 +22,7 @@ export function NodeConfigPanel({ designId }: { designId: string }) {
   const importRecord = useDesignStore((s) => s.importRecord);
   const graph = useDesignStore((s) => s.graph);
   const designName = useDesignStore((s) => s.designName);
+  const designMode = useDesignStore((s) => s.designMode);
   const phaseNotes = useDesignStore((s) => s.phaseNotes);
   const actionLog = useDesignStore((s) => s.actionLog);
   const selectedNodeIds = useDesignStore((s) => s.selectedNodeIds);
@@ -39,7 +40,14 @@ export function NodeConfigPanel({ designId }: { designId: string }) {
 
   const onExport = () =>
     exportDesignFile(
-      buildDesignRecord(designId, designName, graph, phaseNotes, actionLog),
+      buildDesignRecord(
+        designId,
+        designName,
+        graph,
+        designMode,
+        phaseNotes,
+        actionLog,
+      ),
     );
 
   const onImportFile = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -52,6 +60,7 @@ export function NodeConfigPanel({ designId }: { designId: string }) {
       return;
     }
     setImportError(null);
+    // keeps the current design's mode; the file's mode is ignored (T-7.2)
     importRecord(record);
   };
 

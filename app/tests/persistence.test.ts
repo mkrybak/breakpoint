@@ -5,14 +5,17 @@ import { emptyScorecard } from "../src/lib/grading";
 import {
   buildDesignRecord,
   buildRunBundle,
+  DEFAULT_DESIGN_MODE,
   deleteDesign,
   designStorageKey,
+  exportDesignFile,
   listDesigns,
   loadDesign,
   parseDesignRecord,
   parseRunBundle,
   renameDesign,
   saveDesign,
+  type DesignMode,
   type DesignRecord,
 } from "../src/persistence/local";
 import { scorecardStorageKey } from "../src/persistence/scorecard";
@@ -72,7 +75,7 @@ afterEach(() => {
 
 describe("buildDesignRecord", () => {
   it("stubs the fields nothing produces before M4", () => {
-    const record = buildDesignRecord("d1", "My design", fixtureGraph());
+    const record = buildDesignRecord("d1", "My design", fixtureGraph(), "practice");
     expect(record.id).toBe("d1");
     expect(record.name).toBe("My design");
     expect(record.scenarioId).toBe("");
@@ -88,7 +91,7 @@ describe("buildDesignRecord", () => {
   });
 
   it("carries a provided phaseNotes map", () => {
-    const record = buildDesignRecord("d1", "My design", fixtureGraph(), {
+    const record = buildDesignRecord("d1", "My design", fixtureGraph(), "practice", {
       requirements: "reqs",
       entities: "",
       api: "",
@@ -99,7 +102,7 @@ describe("buildDesignRecord", () => {
   });
 
   it("carries a provided actionLog", () => {
-    const record = buildDesignRecord("d1", "My design", fixtureGraph(), undefined, [
+    const record = buildDesignRecord("d1", "My design", fixtureGraph(), "practice", undefined, [
       { t: 3, phase: "hld", kind: "sim_run", detail: "ran X" },
     ]);
     expect(record.actionLog).toHaveLength(1);
@@ -109,7 +112,7 @@ describe("buildDesignRecord", () => {
 
 describe("saveDesign / loadDesign", () => {
   it("round-trips a record through localStorage", () => {
-    const record = buildDesignRecord("d1", "My design", fixtureGraph());
+    const record = buildDesignRecord("d1", "My design", fixtureGraph(), "practice");
     saveDesign(record);
     expect(localStorage.getItem(designStorageKey("d1"))).not.toBeNull();
     expect(loadDesign("d1")).toEqual(record);
@@ -121,7 +124,7 @@ describe("saveDesign / loadDesign", () => {
 
   it("does not throw when localStorage is unavailable", () => {
     vi.unstubAllGlobals();
-    const record = buildDesignRecord("d1", "My design", fixtureGraph());
+    const record = buildDesignRecord("d1", "My design", fixtureGraph(), "practice");
     expect(() => saveDesign(record)).not.toThrow();
     expect(() => loadDesign("d1")).not.toThrow();
   });
@@ -129,7 +132,7 @@ describe("saveDesign / loadDesign", () => {
 
 describe("parseDesignRecord", () => {
   it("accepts its own export shape", () => {
-    const record = buildDesignRecord("d1", "My design", fixtureGraph());
+    const record = buildDesignRecord("d1", "My design", fixtureGraph(), "practice");
     expect(parseDesignRecord(JSON.stringify(record))).toEqual(record);
   });
 
@@ -141,7 +144,7 @@ describe("parseDesignRecord", () => {
   });
 
   it("rejects a graph with an unknown node kind", () => {
-    const record = buildDesignRecord("d1", "My design", fixtureGraph());
+    const record = buildDesignRecord("d1", "My design", fixtureGraph(), "practice");
     const raw = JSON.parse(JSON.stringify(record)) as {
       graph: { nodes: { kind: string }[] };
     };
@@ -150,7 +153,7 @@ describe("parseDesignRecord", () => {
   });
 
   it("rejects a graph missing entryNodeId or with a bad edge kind", () => {
-    const record = buildDesignRecord("d1", "My design", fixtureGraph());
+    const record = buildDesignRecord("d1", "My design", fixtureGraph(), "practice");
     const noEntry = JSON.parse(JSON.stringify(record)) as {
       graph: { entryNodeId?: string };
     };
@@ -173,13 +176,14 @@ describe("parseDesignRecord", () => {
     const record = parseDesignRecord(JSON.stringify(minimal));
     expect(record).not.toBeNull();
     expect(record?.scenarioId).toBe("");
+    expect(record?.mode).toBe("practice");
     expect(record?.actionLog).toEqual([]);
     expect(record?.phaseNotes.requirements).toBe("");
     expect(new Date(record?.updatedAt ?? "").getTime()).not.toBeNaN();
   });
 
   it("keeps valid phase notes and drops invalid actionLog entries", () => {
-    const record = buildDesignRecord("d1", "My design", fixtureGraph());
+    const record = buildDesignRecord("d1", "My design", fixtureGraph(), "practice");
     record.phaseNotes.api = "GET /tweets";
     const raw = {
       ...record,
@@ -201,6 +205,7 @@ function recordAt(id: string, name: string, updatedAt: string): DesignRecord {
   return {
     id,
     name,
+    mode: "practice",
     scenarioId: "",
     graph: fixtureGraph(),
     phaseNotes: {
@@ -298,7 +303,7 @@ function fixtureResult(): RunResult {
 describe("parseRunBundle", () => {
   it("round-trips a bundle → identical replay frames", () => {
     const bundle = buildRunBundle(
-      buildDesignRecord("d1", "My design", fixtureGraph()),
+      buildDesignRecord("d1", "My design", fixtureGraph(), "practice"),
       fixtureScenario(),
       fixtureResult(),
       emptyScorecard(),
@@ -314,7 +319,7 @@ describe("parseRunBundle", () => {
 
   it("omits scorecard when the bundle has none", () => {
     const bundle = buildRunBundle(
-      buildDesignRecord("d1", "My design", fixtureGraph()),
+      buildDesignRecord("d1", "My design", fixtureGraph(), "practice"),
       fixtureScenario(),
       fixtureResult(),
     );
@@ -326,7 +331,7 @@ describe("parseRunBundle", () => {
 
   it("rejects malformed bundles with a readable error", () => {
     const good = buildRunBundle(
-      buildDesignRecord("d1", "My design", fixtureGraph()),
+      buildDesignRecord("d1", "My design", fixtureGraph(), "practice"),
       fixtureScenario(),
       fixtureResult(),
     );
@@ -359,12 +364,12 @@ describe("autoShare import (T-6.1)", () => {
     const graph = fixtureGraph();
     graph.edges[0].autoShare = false;
     const withFlag = parseDesignRecord(
-      JSON.stringify(buildDesignRecord("d1", "Design", graph)),
+      JSON.stringify(buildDesignRecord("d1", "Design", graph, "practice")),
     );
     expect(withFlag?.graph.edges[0].autoShare).toBe(false);
 
     const absent = parseDesignRecord(
-      JSON.stringify(buildDesignRecord("d2", "Design", fixtureGraph())),
+      JSON.stringify(buildDesignRecord("d2", "Design", fixtureGraph(), "practice")),
     );
     expect(absent).not.toBeNull();
     expect(absent?.graph.edges[0].autoShare).toBeUndefined();
@@ -372,9 +377,108 @@ describe("autoShare import (T-6.1)", () => {
 
   it("rejects a non-boolean autoShare", () => {
     const raw = JSON.parse(
-      JSON.stringify(buildDesignRecord("d1", "Design", fixtureGraph())),
+      JSON.stringify(buildDesignRecord("d1", "Design", fixtureGraph(), "practice")),
     ) as { graph: { edges: Record<string, unknown>[] } };
     raw.graph.edges[0].autoShare = "yes";
     expect(parseDesignRecord(JSON.stringify(raw))).toBeNull();
+  });
+});
+
+describe("design mode (T-7.2)", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("buildDesignRecord carries the given mode", () => {
+    expect(buildDesignRecord("d1", "Q", fixtureGraph(), "quick").mode).toBe(
+      "quick",
+    );
+  });
+
+  it("every mode survives a parse round-trip", () => {
+    for (const mode of ["quick", "practice", "interview"] as DesignMode[]) {
+      const record = buildDesignRecord("d1", "Design", fixtureGraph(), mode);
+      expect(parseDesignRecord(JSON.stringify(record))).toEqual(record);
+    }
+  });
+
+  it("missing or invalid modes parse as practice", () => {
+    expect(DEFAULT_DESIGN_MODE).toBe("practice");
+    const record = buildDesignRecord("d1", "Design", fixtureGraph(), "quick");
+    const legacy = JSON.parse(JSON.stringify(record)) as Record<string, unknown>;
+    delete legacy.mode;
+    for (const raw of [legacy, { ...record, mode: "turbo" }, { ...record, mode: 42 }]) {
+      expect(parseDesignRecord(JSON.stringify(raw))?.mode).toBe(
+        DEFAULT_DESIGN_MODE,
+      );
+    }
+  });
+
+  it("loads a legacy stored record as practice without rewriting it", () => {
+    const legacy = JSON.parse(
+      JSON.stringify(buildDesignRecord("old", "Old", fixtureGraph(), "quick")),
+    ) as Record<string, unknown>;
+    delete legacy.mode;
+    localStorage.setItem(designStorageKey("old"), JSON.stringify(legacy));
+
+    expect(loadDesign("old")?.mode).toBe("practice");
+    expect(listDesigns()[0].mode).toBe("practice");
+    expect(localStorage.getItem(designStorageKey("old"))).not.toContain(
+      '"mode"',
+    );
+  });
+
+  it("listDesigns reports each record's own mode", () => {
+    saveDesign({
+      ...recordAt("dq", "Quick", "2026-06-01T00:00:00.000Z"),
+      mode: "quick",
+    });
+    saveDesign(recordAt("dp", "Practice", "2026-01-01T00:00:00.000Z"));
+    expect(listDesigns().map((d) => [d.id, d.mode])).toEqual([
+      ["dq", "quick"],
+      ["dp", "practice"],
+    ]);
+  });
+
+  it("renameDesign keeps the mode", () => {
+    saveDesign(buildDesignRecord("dq", "Quick", fixtureGraph(), "quick"));
+    expect(renameDesign("dq", "Renamed")).not.toBeNull();
+    expect(loadDesign("dq")?.mode).toBe("quick");
+  });
+
+  it("export round-trips the mode", async () => {
+    let blob: Blob | undefined;
+    vi.spyOn(URL, "createObjectURL").mockImplementation((obj) => {
+      blob = obj as Blob;
+      return "blob:test";
+    });
+    vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
+    vi.stubGlobal("document", { createElement: () => ({ click: () => {} }) });
+
+    const record = buildDesignRecord("d1", "Quick one", fixtureGraph(), "quick");
+    exportDesignFile(record);
+    expect(blob).toBeDefined();
+    const parsed = parseDesignRecord(await (blob as Blob).text());
+    expect(parsed).toEqual(record);
+    expect(parsed?.mode).toBe("quick");
+  });
+
+  it("the run bundle carries the mode; a mode-less bundle design is practice", () => {
+    const bundle = buildRunBundle(
+      buildDesignRecord("d1", "Q", fixtureGraph(), "quick"),
+      fixtureScenario(),
+      fixtureResult(),
+    );
+    const parsed = parseRunBundle(JSON.stringify(bundle));
+    expect(parsed.ok).toBe(true);
+    if (parsed.ok) expect(parsed.bundle.design.mode).toBe("quick");
+
+    const raw = JSON.parse(JSON.stringify(bundle)) as {
+      design: Record<string, unknown>;
+    };
+    delete raw.design.mode;
+    const legacy = parseRunBundle(JSON.stringify(raw));
+    expect(legacy.ok).toBe(true);
+    if (legacy.ok) expect(legacy.bundle.design.mode).toBe("practice");
   });
 });

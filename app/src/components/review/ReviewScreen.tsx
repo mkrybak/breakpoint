@@ -29,6 +29,7 @@ const BTN =
 
 export function ReviewScreen({ runId }: { runId: string }) {
   const designName = useDesignStore((s) => s.designName);
+  const designMode = useDesignStore((s) => s.designMode);
   const graph = useDesignStore((s) => s.graph);
   const actionLog = useDesignStore((s) => s.actionLog);
   const actionSnapshots = useDesignStore((s) => s.actionSnapshots);
@@ -58,6 +59,7 @@ export function ReviewScreen({ runId }: { runId: string }) {
       runId,
       designName,
       graph,
+      designMode,
       phaseNotes,
       actionLog,
     );

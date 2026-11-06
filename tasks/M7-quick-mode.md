@@ -23,7 +23,8 @@ depends-on: M6
 **Accept:** One Playwright test: open landing → open a design built from `examples/twitter.json` → press Run → a verdict appears and at least one node changes state. `npm run e2e` runs it locally, and CI runs it after `build`. `@playwright/test` (dev-only) gets a dependency-budget entry in [[05-engines]]. Lands first because M7 reshuffles the UI and nothing automated covers canvas → worker → HUD today.
 
 ### T-7.2 — Mode on the design record
-- [ ] T-7.2 done
+- [x] T-7.2 done
+  - Also touched: `tests/design-store.test.ts`, `tests/actions-store.test.ts`, LandingScreen/NodeConfigPanel/ReviewScreen call sites, `02-data-model.md`.
 
 **Files:** `src/persistence/local.ts`, `src/stores/design-store.ts`, `tests/persistence.test.ts`
 **Accept:** `DesignRecord.mode: "quick" | "practice" | "interview"`. Records and imports without the field load as `"practice"` (no migration). `buildDesignRecord` takes the mode. Export round-trips it. Engines (`src/lib/**`) stay mode-unaware.
@@ -63,3 +64,4 @@ depends-on: M6
 - 2026-11-05: Quick mode ships before the simulation fixes (M8), per product priority. Challenges are chosen so they work with today's engine (no queue-buffering challenge until M8).
 - 2026-11-05: Desktop-only. No responsive layout or touch drag in M7; the existing `SmallScreenNotice` stays for Quick mode too.
 - 2026-11-05 (T-7.1, lead call): restore the `libc` fields npm 10.9 stripped from existing lockfile entries, so the lockfile diff only adds Playwright — keeps CI's `npm ci` on other platforms unchanged.
+- 2026-11-05 (T-7.2, lead call): `buildDesignRecord`'s `mode` is a required positional argument (no default), so no save path can silently write "practice" over a Quick design; unknown mode values load as "practice" like a missing one.

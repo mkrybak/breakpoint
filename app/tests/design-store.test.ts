@@ -74,6 +74,7 @@ beforeEach(() => {
     graph: fixtureGraph(),
     designId: null,
     designName: "Untitled design",
+    designMode: "practice",
     selectedNodeIds: [],
     selectedEdgeIds: [],
     measured: {},
@@ -223,7 +224,7 @@ describe("design-store", () => {
   });
 
   it("attachDesign loads the persisted record", () => {
-    const record = buildDesignRecord("d1", "Saved design", fixtureGraph());
+    const record = buildDesignRecord("d1", "Saved design", fixtureGraph(), "practice");
     localStorage.setItem(designStorageKey("d1"), JSON.stringify(record));
 
     useDesignStore.getState().attachDesign("d1");
@@ -243,7 +244,7 @@ describe("design-store", () => {
 
   it("importRecord adopts graph and name but keeps the attached id", () => {
     useDesignStore.setState({ designId: "current" });
-    const record = buildDesignRecord("other-id", "Imported", fixtureGraph());
+    const record = buildDesignRecord("other-id", "Imported", fixtureGraph(), "practice");
 
     useDesignStore.getState().importRecord(record);
     const s = useDesignStore.getState();
@@ -280,7 +281,7 @@ describe("design-store", () => {
   });
 
   it("attachDesign loads persisted phase notes", () => {
-    const record = buildDesignRecord("d-notes", "Notes", fixtureGraph(), {
+    const record = buildDesignRecord("d-notes", "Notes", fixtureGraph(), "practice", {
       requirements: "3 functional reqs",
       entities: "",
       api: "",
@@ -297,7 +298,7 @@ describe("design-store", () => {
 
   it("importRecord adopts phase notes", () => {
     useDesignStore.setState({ designId: "current" });
-    const record = buildDesignRecord("other", "Imported", fixtureGraph(), {
+    const record = buildDesignRecord("other", "Imported", fixtureGraph(), "practice", {
       requirements: "",
       entities: "User, Tweet",
       api: "",
@@ -430,16 +431,89 @@ describe("auto-balancing lb (T-6.1)", () => {
     useDesignStore.setState({ designId: "current" });
     useDesignStore
       .getState()
-      .importRecord(buildDesignRecord("other", "Imported", skewed));
+      .importRecord(buildDesignRecord("other", "Imported", skewed, "practice"));
     expect(edge("e-lb-app")?.trafficShare).toBe(1);
     expect(edge("e-lb-app2")?.trafficShare).toBe(0.9);
 
     localStorage.setItem(
       designStorageKey("d-skew"),
-      JSON.stringify(buildDesignRecord("d-skew", "Skew", skewed)),
+      JSON.stringify(buildDesignRecord("d-skew", "Skew", skewed, "practice")),
     );
     useDesignStore.getState().attachDesign("d-skew");
     expect(edge("e-lb-app")?.trafficShare).toBe(1);
     expect(edge("e-lb-app2")?.trafficShare).toBe(0.9);
+  });
+});
+
+describe("design mode (T-7.2)", () => {
+  function storedMode(id: string): unknown {
+    const stored = localStorage.getItem(designStorageKey(id));
+    return (JSON.parse(stored ?? "{}") as { mode?: unknown }).mode;
+  }
+
+  it("attachDesign adopts the stored mode", () => {
+    localStorage.setItem(
+      designStorageKey("dq"),
+      JSON.stringify(buildDesignRecord("dq", "Q", fixtureGraph(), "quick")),
+    );
+    useDesignStore.getState().attachDesign("dq");
+    expect(useDesignStore.getState().designMode).toBe("quick");
+  });
+
+  it("attachDesign defaults to practice for legacy and missing records", () => {
+    const legacy = JSON.parse(
+      JSON.stringify(buildDesignRecord("dl", "L", fixtureGraph(), "quick")),
+    ) as Record<string, unknown>;
+    delete legacy.mode;
+    localStorage.setItem(designStorageKey("dl"), JSON.stringify(legacy));
+    useDesignStore.getState().attachDesign("dl");
+    expect(useDesignStore.getState().designMode).toBe("practice");
+
+    // reset, not left over from the previous design
+    useDesignStore.setState({ designMode: "quick" });
+    useDesignStore.getState().attachDesign("never-stored");
+    expect(useDesignStore.getState().designMode).toBe("practice");
+  });
+
+  it("in-place import keeps the current design's mode", () => {
+    vi.useFakeTimers();
+    try {
+      localStorage.setItem(
+        designStorageKey("dq"),
+        JSON.stringify(buildDesignRecord("dq", "Q", fixtureGraph(), "quick")),
+      );
+      useDesignStore.getState().attachDesign("dq");
+      useDesignStore
+        .getState()
+        .importRecord(
+          buildDesignRecord("other", "Imported", fixtureGraph(), "practice"),
+        );
+      const s = useDesignStore.getState();
+      expect(s.designMode).toBe("quick");
+      expect(s.designId).toBe("dq");
+      expect(s.designName).toBe("Imported");
+
+      useDesignStore.getState().addNode("cache", { x: 0, y: 0 });
+      vi.advanceTimersByTime(600);
+      expect(storedMode("dq")).toBe("quick");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("autosave writes the attached mode", () => {
+    vi.useFakeTimers();
+    try {
+      localStorage.setItem(
+        designStorageKey("di"),
+        JSON.stringify(buildDesignRecord("di", "I", fixtureGraph(), "interview")),
+      );
+      useDesignStore.getState().attachDesign("di");
+      useDesignStore.getState().addNode("cache", { x: 0, y: 0 });
+      vi.advanceTimersByTime(600);
+      expect(storedMode("di")).toBe("interview");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

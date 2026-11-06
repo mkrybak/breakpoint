@@ -46,7 +46,12 @@ export function LandingScreen() {
     const id = crypto.randomUUID();
     const name = newName.trim() || "Untitled design";
     saveDesign(
-      buildDesignRecord(id, name, { nodes: [], edges: [], entryNodeId: "" }),
+      buildDesignRecord(
+        id,
+        name,
+        { nodes: [], edges: [], entryNodeId: "" },
+        "practice",
+      ),
     );
     router.push(`/design/${id}`);
   };
