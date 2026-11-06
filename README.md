@@ -26,7 +26,7 @@ The design is not a drawing — it's a typed graph (React Flow JSON). That makes
 | [[02-data-model]] | TypeScript types + persistence shapes (component registry, graph, scenarios) |
 | [[03-simulation-engine]] | Spec for the tick engine and stress rules |
 | [[05-engines]] | Engine-style module boundaries, extension points, dependency budget |
-| [[04-roadmap]] | Milestones M0–M5 (MVP), dependency order, post-MVP backlog |
+| [[04-roadmap]] | Milestones M0–M11, dependency order, parked ideas |
 | [[process/sdlc\|SDLC process]] | How I work through tasks with Claude Code |
 | [[process/claude-workflow\|Claude workflow]] | Model split: /plan (Fable) → /implement (Sonnet), /ui (Fable) |
 | `tasks/` | One note per milestone, checkboxes per task |
@@ -40,7 +40,15 @@ The design is not a drawing — it's a typed graph (React Flow JSON). That makes
 - [x] [[tasks/M3-stress-scenarios\|M3 — Stress scenarios & realtime viz]] ✅ 2026-07-15
 - [x] [[tasks/M4-interview-flow\|M4 — Interview flow & human grading]] ✅ 2026-07-15
 - [x] [[tasks/M5-persistence-and-deploy\|M5 — Export/import & deploy]] ✅ 2026-07-19
-- [ ] [[tasks/M6-post-mvp-features\|M6 — Post-MVP features]] (ongoing; T-6.1 auto-balancing LB ✅ 2026-07-19)
+- [x] [[tasks/M6-post-mvp-features\|M6 — Post-MVP features]] ✅ 2026-07-19 (T-6.1 auto-balancing LB)
+- [ ] [[tasks/M7-quick-mode\|M7 — Quick mode]] ← next
+- [ ] [[tasks/M8-trustworthy-simulation\|M8 — Trustworthy simulation]]
+- [ ] [[tasks/M9-components-and-cost\|M9 — More components + cost]]
+- [ ] [[tasks/M10-practice-depth\|M10 — Practice depth]]
+- [ ] [[tasks/M11-live-interview-mode\|M11 — Live Interview mode]]
+- [ ] [[tasks/MH-housekeeping\|MH — Housekeeping]] (slot in anywhere)
+
+Ordered backlog: [[tasks/backlog]]. Parked: AI feedback.
 
 ## Conventions
 

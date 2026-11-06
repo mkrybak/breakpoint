@@ -1,13 +1,13 @@
 ---
 tags: [milestone]
-status: active
+status: done
 milestone: M6
 depends-on: M5
 ---
 
 # M6 — Post-MVP features
 
-**Goal:** Incremental feature work on top of the shipped MVP. Each task is one spec → one plan → one commit, drawn from the post-MVP backlog in [[04-roadmap]]. Milestones M0–M5 stay closed; new features land here.
+**Goal:** Incremental feature work on top of the shipped MVP. Each task is one spec → one plan → one commit, drawn from the post-MVP backlog in [[04-roadmap]]. Milestones M0–M5 stay closed. Closed 2026-11-05 after T-6.1; further work is planned as M7–M11 (see [[tasks/backlog]]).
 
 **Demo:** Per task — see each task's Accept criteria.
 
