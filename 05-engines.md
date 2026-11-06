@@ -63,6 +63,7 @@ Each engine grows by **adding a data entry or a map entry**, never by editing a 
 | New validation warning | `validation/` — push a `Check` into the checks list |
 | New scenario | `scenarios/presets/*.json` — pure data, no code |
 | New Quick-mode scenario (starter/challenges) | `scenarios/presets/*.json` + one entry in `QUICK_SCENARIOS` (`scenarios/index.ts`) — never listed in the shared presets |
+| New Quick challenge | `scenarios/presets/quick-*.json` + its `QUICK_SCENARIOS` entry + one `QUICK_CHALLENGES` entry (`scenarios/challenges.ts`) |
 | New rubric dimension | `grading/rubric.ts` — pure data |
 | New recorded action | `actions/` — extend ActionKind union + one emitter |
 
@@ -79,3 +80,4 @@ Runtime dependencies are a liability; the target list is short: `next`, `react`,
 - 2026-07-14 (T-2.7 planning): `tsx` added to the dev-dependency list. What it saves: running `scripts/sim.ts` (the sim CLI) under Node with the `@/*` tsconfig alias every engine file uses internally — Node 24's native type-stripping cannot resolve path aliases. Cost: one dev-only dep, zero runtime footprint. Could 30 lines do it: only as a custom module-resolution loader — exactly the fiddly code a maintained runner replaces. Engines never import it; depcruise now also scans `scripts/` (the CLI is shell: engine imports via index.ts only).
 - 2026-11-05 (T-7.1 planning): `@playwright/test` added as a dev-only dependency. What it saves: a real-browser check of the canvas → web worker → HUD path, which unit tests can't reach (vitest has no Worker; the store uses a fake). Cost: one dev dep plus a Chromium download in CI (~1 min), zero runtime footprint. Could 30 lines do it: no, driving a real browser needs a browser automation library. Lives in `app/e2e/`, never imported by `src/`.
 - 2026-11-05 (T-7.3 planning): Quick mode's scenarios are a separate plain-data list (`QUICK_SCENARIOS`) in the scenarios engine; no engine logic reads a mode. The starter *design* (a DesignGraph plus the default name "Quick simulation") is shell data in `src/components/quick/starter.ts`, because a graph isn't a scenario and the name is UI copy.
+- 2026-11-05 (T-7.6 planning): challenges are plain data in the scenarios engine (`QuickChallenge = { scenarioId, goal, hint? }`, ordered = suggestion order); the scenario id is the identity. Nudge logic is a pure shell helper (`components/quick/challenge-nudge.ts`); solved state is shell persistence (`persistence/challenges.ts`, key `bp:challenges:solved`). Only full-length passes count.

@@ -85,7 +85,5 @@ test("quick design → simple workspace → run → plain verdict", async ({
   await expect(page.getByText("Passed", { exact: true })).toBeVisible({
     timeout: 10_000,
   });
-  await expect(
-    page.getByText(/Your design handled “Steady traffic”/),
-  ).toBeVisible();
+  await expect(page.getByText(/Stopped at .* of 30s/)).toBeVisible();
 });

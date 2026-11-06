@@ -147,6 +147,43 @@ describe("describeVerdictPlainly", () => {
     ]);
   });
 
+  it("keeps the success sentence for a full-length pass", () => {
+    expect(
+      describeVerdictPlainly(
+        { passed: true, failures: [], advisories: [] },
+        steady,
+        steady.durationSec,
+      ),
+    ).toEqual([
+      "Your design handled “Steady traffic”: p95 stayed under 200 ms and errors under 1%.",
+    ]);
+  });
+
+  it("doesn't claim success on a pass stopped early", () => {
+    expect(
+      describeVerdictPlainly(
+        { passed: true, failures: [], advisories: [] },
+        steady,
+        2.8,
+      ),
+    ).toEqual([
+      `Stopped at 2.8s of ${steady.durationSec}s. So far p95 stayed under 200 ms and errors under 1%. Let the run finish for the full result.`,
+    ]);
+  });
+
+  it("keeps the failure lines on a failed run stopped early", () => {
+    expect(
+      describeVerdictPlainly(
+        failed([{ criterion: "error-rate", atSec: 1.5, detail: "x" }]),
+        steady,
+        2.8,
+      ),
+    ).toEqual([
+      "Too many requests failed: errors went over 1% at 1.5s.",
+      PLAIN_CAPACITY_TIP,
+    ]);
+  });
+
   it("omits advisories on a pass", () => {
     const lines = describeVerdictPlainly(
       { passed: true, failures: [], advisories: ["single point of failure"] },

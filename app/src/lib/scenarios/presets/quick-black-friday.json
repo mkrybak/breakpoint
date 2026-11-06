@@ -1,0 +1,14 @@
+{
+  "id": "quick-black-friday",
+  "name": "Black Friday",
+  "description": "Shoppers pile in all morning, then a flash sale puts another 50% on top.",
+  "durationSec": 40,
+  "baseRps": 2000,
+  "readRatio": 0.9,
+  "timeline": [
+    { "at": 5, "rule": "ramp", "toRps": 8000, "overSec": 15 },
+    { "at": 25, "rule": "spike", "factor": 1.5, "forSec": 8 }
+  ],
+  "pass": { "p95Ms": 250, "maxErrorRate": 0.01 },
+  "seed": 42
+}

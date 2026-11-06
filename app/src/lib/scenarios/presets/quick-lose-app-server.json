@@ -1,0 +1,13 @@
+{
+  "id": "quick-lose-app-server",
+  "name": "Lose an app server",
+  "description": "A busier day at 5,000 RPS. Ten seconds in, one app server instance crashes and stays down.",
+  "durationSec": 30,
+  "baseRps": 5000,
+  "readRatio": 0.8,
+  "timeline": [
+    { "at": 10, "rule": "kill", "target": "app_server", "count": 1 }
+  ],
+  "pass": { "p95Ms": 200, "maxErrorRate": 0.01, "minSurvivedKills": 1 },
+  "seed": 12
+}

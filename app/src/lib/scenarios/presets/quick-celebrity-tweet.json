@@ -1,0 +1,14 @@
+{
+  "id": "quick-celebrity-tweet",
+  "name": "Celebrity tweet",
+  "description": "A megastar posts and everyone opens the same post at once: a 5× wave of reads.",
+  "durationSec": 35,
+  "baseRps": 3000,
+  "readRatio": 0.95,
+  "timeline": [
+    { "at": 8, "rule": "hotkey", "skew": 0.5, "forSec": 20 },
+    { "at": 10, "rule": "spike", "factor": 5, "forSec": 12 }
+  ],
+  "pass": { "p95Ms": 200, "maxErrorRate": 0.02 },
+  "seed": 7
+}

@@ -107,8 +107,15 @@ export const PLAIN_CAPACITY_TIP =
 export function describeVerdictPlainly(
   verdict: Verdict,
   scenario: Scenario,
+  /** sim seconds actually run; a pass on a run stopped early isn't a full pass */
+  ranSec?: number,
 ): string[] {
   if (verdict.passed) {
+    if (ranSec !== undefined && ranSec < scenario.durationSec - 0.05) {
+      return [
+        `Stopped at ${formatSec(ranSec)} of ${scenario.durationSec}s. So far p95 stayed under ${scenario.pass.p95Ms} ms and errors under ${formatBudgetPct(scenario.pass.maxErrorRate)}. Let the run finish for the full result.`,
+      ];
+    }
     return [
       `Your design handled “${scenario.name}”: p95 stayed under ${scenario.pass.p95Ms} ms and errors under ${formatBudgetPct(scenario.pass.maxErrorRate)}.`,
     ];

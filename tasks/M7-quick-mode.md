@@ -51,7 +51,8 @@ depends-on: M6
 **Accept:** `/design/[id]` renders by mode. Quick has no phase bar, phase notes, requirements panel, review link or canvas lock, and no action recording. The HUD is simplified to served RPS, p95 and error %, and the verdict uses plain language. Run is the visually dominant action. Scenario choice sits behind "More scenarios" and chaos behind "Break it"; both are hidden, not disabled. Practice renders exactly as today. Run via `/ui`.
 
 ### T-7.6 — Challenges + next-challenge nudge
-- [ ] T-7.6 done
+- [x] T-7.6 done
+  - Challenge list = `QUICK_CHALLENGES` in `src/lib/scenarios/challenges.ts` + four `quick-*.json` scenarios; solved state `src/persistence/challenges.ts`; card `components/quick/ChallengeCard.tsx` + pure `challenge-nudge.ts`. Also: plain verdict says "Stopped at Xs of Ns" for a pass on a run stopped early (`e2e/quick.spec.ts` matcher updated).
 
 **Files:** challenge data (beside scenario presets), nudge card component, solved-state helper in `src/persistence/`
 **Accept:** An ordered list of challenges as plain data (scenario id + one-line goal + optional hint): 3× spike, lose an app server, Black Friday, Celebrity tweet. After a run, a card suggests the next unsolved challenge, and picking it switches the scenario. All challenges are also listed. A pass marks the challenge solved in localStorage (per browser). Adding a challenge = adding a data entry.
@@ -75,3 +76,6 @@ depends-on: M6
 - 2026-11-05 (T-7.5, lead call): Quick's HUD controls swap by run state — "More scenarios" when no run is live, "Break it" only while running/paused. Both menus plus Pause/Stop and three metrics overflowed the 672px main column at 1440×900; picking a scenario mid-run would kill the run anyway.
 - 2026-11-05 (T-7.5, lead call): Quick opens on the starter scenario every time (the selection isn't persisted); leaving Quick resets the sim and restores Practice's default preset. The plain verdict keeps the `Passed`/`Failed` headline, adds one sentence per failure plus a canvas tip, and hides advisories (grader hints).
 - 2026-11-05 (T-7.5, lead call): `/design/[id]` renders a blank frame until the design is attached (mode lives in localStorage), so Practice's server HTML is blank for one frame; after hydration Practice is pixel-identical (verified by image diff).
+- 2026-11-05 (T-7.6, lead call): challenge ladder — each needs one more app-server replica than the last (3× spike: 2, lose a server at 5k RPS: 3, Quick Black Friday: 4 or a CDN, Quick celebrity tweet: 5 or a CDN); all verified in tests. Only a full-length pass marks a challenge solved (a 2s run can "pass" before the spike).
+- 2026-11-05 (T-7.6, lead call): the challenge card is always in Quick's right column (header "Challenges · n/4 solved" toggles the full list); before the first run it's just the header. Switching challenges is disabled with a tooltip while a run is live, so a click can't silently abort it.
+- 2026-11-05 (T-7.6, lead call): a pass on a run stopped early shows "Stopped at Xs of Ns. So far …" instead of "Your design handled …", so the verdict doesn't claim success for load it never saw. Headline stays `Passed`.

@@ -2,6 +2,10 @@ import type { Scenario, StressRule } from "@/lib/core";
 import azOutage from "./presets/az-outage.json";
 import blackFriday from "./presets/black-friday.json";
 import celebrityTweet from "./presets/celebrity-tweet.json";
+import quickBlackFriday from "./presets/quick-black-friday.json";
+import quickCelebrityTweet from "./presets/quick-celebrity-tweet.json";
+import quickLoseAppServer from "./presets/quick-lose-app-server.json";
+import quickSpike3x from "./presets/quick-spike-3x.json";
 import starter from "./presets/starter.json";
 
 function isRecord(v: unknown): v is Record<string, unknown> {
@@ -137,7 +141,13 @@ export const STARTER_SCENARIO: Scenario = requirePreset(starter);
  * the display order; the starter stays first. To add one: drop a JSON
  * file in presets/ and append one requirePreset(...) entry here.
  */
-export const QUICK_SCENARIOS: readonly Scenario[] = [STARTER_SCENARIO];
+export const QUICK_SCENARIOS: readonly Scenario[] = [
+  STARTER_SCENARIO,
+  requirePreset(quickSpike3x),
+  requirePreset(quickLoseAppServer),
+  requirePreset(quickBlackFriday),
+  requirePreset(quickCelebrityTweet),
+];
 
 export function listQuickScenarios(): readonly Scenario[] {
   return QUICK_SCENARIOS;
@@ -164,3 +174,6 @@ export function describeStressRule(rule: StressRule): string {
       return `at ${rule.at}s — hotkey skew ${rule.skew} for ${rule.forSec}s`;
   }
 }
+
+export { getQuickChallenge, QUICK_CHALLENGES } from "./challenges";
+export type { QuickChallenge } from "./challenges";

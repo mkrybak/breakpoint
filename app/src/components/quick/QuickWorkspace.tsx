@@ -10,6 +10,7 @@ import { Verdict } from "@/components/hud/Verdict";
 import { SmallScreenNotice } from "@/components/layout/SmallScreenNotice";
 import { Palette } from "@/components/palette/Palette";
 import { NodeConfigPanel } from "@/components/panels/NodeConfigPanel";
+import { ChallengeCard } from "@/components/quick/ChallengeCard";
 import { BreakItMenu, ScenarioMenu } from "@/components/quick/QuickMenus";
 import {
   leaveQuickMode,
@@ -54,7 +55,7 @@ export function QuickWorkspace({ designId }: { designId: string }) {
         <aside className="flex w-72 shrink-0 flex-col border-l border-neutral-800 bg-neutral-950">
           <div className="flex flex-col gap-6 overflow-y-auto p-3">
             <QuickScenarioSummary />
-            {/* T-7.6: next-challenge nudge card (shown after a run) goes here */}
+            <ChallengeCard />
             {/* T-7.7: "Try a full practice interview" link goes here */}
           </div>
           <EventLog />

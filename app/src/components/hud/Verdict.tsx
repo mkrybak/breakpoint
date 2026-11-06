@@ -6,7 +6,15 @@ import {
   describeVerdictPlainly,
   type RunTone,
 } from "@/components/hud/hud-format";
+import type { RunResult } from "@/lib/core";
+import { TICKS_PER_SEC } from "@/lib/simulation";
 import { useSimStore } from "@/stores/sim-store";
+
+/** Sim seconds a run covered: frames are ticks at t = 0, 0.1, …, so a full run equals durationSec. */
+function ranSeconds(result: RunResult): number {
+  const last = result.frames.at(-1);
+  return last ? last.t + 1 / TICKS_PER_SEC : 0;
+}
 
 const TONE: Record<RunTone, string> = {
   idle: "border-neutral-700 bg-neutral-900/90 text-neutral-300",
@@ -32,7 +40,11 @@ export function Verdict({
   if (variant === "plain") {
     const lines =
       status === "done" && result && runScenario
-        ? describeVerdictPlainly(result.verdict, runScenario)
+        ? describeVerdictPlainly(
+            result.verdict,
+            runScenario,
+            ranSeconds(result),
+          )
         : (status === "running" || status === "paused") && runScenario
           ? [
               `Simulating “${runScenario.name}” (${runScenario.durationSec}s of traffic).`,
