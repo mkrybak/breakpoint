@@ -16,6 +16,7 @@ import {
   leaveQuickMode,
   switchQuickScenario,
 } from "@/components/quick/quick-actions";
+import { TryPracticeLink } from "@/components/quick/TryPracticeLink";
 import { STARTER_SCENARIO } from "@/lib/scenarios";
 import { useScenarioStore } from "@/stores/scenario-store";
 
@@ -56,7 +57,7 @@ export function QuickWorkspace({ designId }: { designId: string }) {
           <div className="flex flex-col gap-6 overflow-y-auto p-3">
             <QuickScenarioSummary />
             <ChallengeCard />
-            {/* T-7.7: "Try a full practice interview" link goes here */}
+            <TryPracticeLink />
           </div>
           <EventLog />
         </aside>

@@ -1,6 +1,6 @@
 ---
 tags: [milestone]
-status: active
+status: done
 milestone: M7
 depends-on: M6
 ---
@@ -58,7 +58,8 @@ depends-on: M6
 **Accept:** An ordered list of challenges as plain data (scenario id + one-line goal + optional hint): 3× spike, lose an app server, Black Friday, Celebrity tweet. After a run, a card suggests the next unsolved challenge, and picking it switches the scenario. All challenges are also listed. A pass marks the challenge solved in localStorage (per browser). Adding a challenge = adding a data entry.
 
 ### T-7.7 — Quick → Practice link + docs
-- [ ] T-7.7 done
+- [x] T-7.7 done
+  - Link = `components/quick/TryPracticeLink.tsx` (creates `newPracticeDesign` + `router.push`, resets phase clock); `e2e/quick-to-practice.spec.ts` opens a saved Quick design → Run → link → fresh Practice.
 
 **Files:** Quick layout, `01-architecture.md`, `README.md`
 **Accept:** Quick mode links to "Try a full practice interview", which starts a *new* Practice design (no conversion in v1). `01-architecture` describes the three modes and the new files, and the README status board is updated.
@@ -79,3 +80,4 @@ depends-on: M6
 - 2026-11-05 (T-7.6, lead call): challenge ladder — each needs one more app-server replica than the last (3× spike: 2, lose a server at 5k RPS: 3, Quick Black Friday: 4 or a CDN, Quick celebrity tweet: 5 or a CDN); all verified in tests. Only a full-length pass marks a challenge solved (a 2s run can "pass" before the spike).
 - 2026-11-05 (T-7.6, lead call): the challenge card is always in Quick's right column (header "Challenges · n/4 solved" toggles the full list); before the first run it's just the header. Switching challenges is disabled with a tooltip while a run is live, so a click can't silently abort it.
 - 2026-11-05 (T-7.6, lead call): a pass on a run stopped early shows "Stopped at Xs of Ns. So far …" instead of "Your design handled …", so the verdict doesn't claim success for load it never saw. Headline stays `Passed`.
+- 2026-11-05 (T-7.7, lead call): "Try a full practice interview" creates a blank "Untitled design" Practice design and opens it directly (same as the landing Practice card with no name), rather than routing to the landing page to name it first.

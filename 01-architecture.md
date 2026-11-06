@@ -44,16 +44,52 @@ flowchart TB
 
 Realtime = worker posts a `SimFrame` every tick; canvas nodes re-render utilization bars/colors, edges animate flow. No websockets needed for single-player; interviewer spectating (post-MVP) adds a broadcast channel.
 
+## Product modes (M7)
+
+One canvas and one simulation engine, three framings ([[docs/superpowers/specs/2026-11-05-product-modes-design|product modes design]]). Modes are a **shell** concern: engines (`src/lib/**`) never see a mode.
+
+| Mode | What `/design/[id]` renders | Since |
+|---|---|---|
+| **Quick simulation** | Starter design (Client → App server → SQL database), big Run, simple HUD (served RPS, p95, error %), plain-language verdict, event log, replay. Scenarios behind "More scenarios" (Quick-only list), chaos behind "Break it" (only while running), next-challenge card, "Try a full practice interview". No phases, notes, requirements, canvas lock, review screen or action recording. | M7 |
+| **Practice** | The full interview, unchanged from M4–M6: phase bar + timers + canvas lock, phase notes, requirements, scenario + chaos panel, action recording, review screen + self-graded scorecard. | M4 |
+| **Interview** | Not built (M11). The landing card says "Coming soon"; a record with this mode opens in the Practice layout with a one-line notice. | M11 |
+
+- **Mode is data.** `DesignRecord.mode: DesignMode` (shell type in `persistence/local.ts`). A missing or unknown value loads as `"practice"`, with no migration. A design's mode is fixed for life: in-place "Import JSON" keeps it, and a landing-page import creates a new design with the file's mode.
+- **One route.** `DesignWorkspace` attaches the design, waits until it's attached, then picks the layout from a `Record<DesignMode, Component>` map (`QuickWorkspace`, `PracticeWorkspace`, `InterviewPreviewWorkspace`).
+- **Quick data is plain data.** Starter graph: `components/quick/starter.ts`. Starter + challenge scenarios: `QUICK_SCENARIOS` in the scenarios engine, never mixed into `SCENARIO_PRESETS`. Challenges: `QUICK_CHALLENGES` (`scenarios/challenges.ts`). Solved state is per browser: `bp:challenges:solved` (`persistence/challenges.ts`).
+- **Store lifecycle.** Entering Quick selects the starter scenario. Leaving it resets the sim and restores Practice's default preset (`leaveQuickMode`). Quick never records actions (`recordInterviewAction` returns early).
+- **Moving between modes.** No conversion in v1. Quick's "Try a full practice interview" creates a new blank Practice design (same as the landing Practice card with no name), resets the phase clock, and opens it. The Quick design stays saved.
+
 ## Repo layout (`app/`)
 
 ```
 app/
 ├── src/
 │   ├── app/
-│   │   ├── page.tsx            # landing / scenario picker
-│   │   ├── design/[id]/page.tsx  # the main canvas screen
+│   │   ├── page.tsx            # landing: mode cards, saved designs, built-in stress tests
+│   │   ├── design/[id]/page.tsx  # workspace: DesignWorkspace renders the layout for the design's mode
 │   │   └── review/[runId]/page.tsx  # replay + action timeline + scorecard (loads imported run file)
 │   ├── components/
+│   │   ├── landing/
+│   │   │   ├── LandingScreen.tsx      # mode cards + saved designs (mode badges) + import
+│   │   │   ├── ModeCards.tsx          # Quick (one click) / Practice (create) / Interview (coming soon)
+│   │   │   ├── ModeBadge.tsx
+│   │   │   ├── new-design.ts          # pure record builders: newQuickDesign, newPracticeDesign, importAsNewDesign
+│   │   │   ├── styles.ts              # shared landing class tokens
+│   │   │   └── ScenarioCards.tsx
+│   │   ├── layout/
+│   │   │   ├── DesignWorkspace.tsx    # attach design, then pick the layout by mode
+│   │   │   ├── PracticeWorkspace.tsx  # today's full interview layout (+ interview-mode notice)
+│   │   │   └── SmallScreenNotice.tsx
+│   │   ├── quick/
+│   │   │   ├── QuickWorkspace.tsx     # Quick layout: canvas, big Run, simple HUD, right column
+│   │   │   ├── QuickMenus.tsx         # "More scenarios" + "Break it"
+│   │   │   ├── MenuButton.tsx         # dependency-free disclosure menu
+│   │   │   ├── quick-actions.ts       # switchQuickScenario / leaveQuickMode (store lifecycle)
+│   │   │   ├── starter.ts             # starter DesignGraph + default name
+│   │   │   ├── ChallengeCard.tsx      # next-challenge nudge + full list
+│   │   │   ├── challenge-nudge.ts     # pure: what the card suggests after a run
+│   │   │   └── TryPracticeLink.tsx    # Quick → new Practice design
 │   │   ├── canvas/
 │   │   │   ├── DesignCanvas.tsx       # React Flow wrapper
 │   │   │   ├── nodes/ComponentNode.tsx  # generic node: icon, util bar, state color
@@ -62,6 +98,7 @@ app/
 │   │   ├── palette/Palette.tsx        # drag source, driven by registry
 │   │   ├── panels/RequirementsPanel.tsx  # NFR inputs: RPS, p95, consistency, error budget
 │   │   ├── panels/ScenarioPanel.tsx      # pick scenario, run/pause, chaos buttons
+│   │   ├── panels/chaos-actions.ts       # chaos list shared by ScenarioPanel and "Break it"
 │   │   ├── hud/MetricsBar.tsx            # p95, error %, served RPS cards
 │   │   ├── hud/EventLog.tsx
 │   │   └── hud/Verdict.tsx
@@ -82,13 +119,15 @@ app/
 │   │   │   └── client.ts         # createSimWorker: spawns the worker (browser)
 │   │   ├── scenarios/
 │   │   │   ├── types.ts          # Scenario schema
-│   │   │   └── presets/black-friday.json, celebrity-tweet.json, ...
+│   │   │   ├── challenges.ts      # QUICK_CHALLENGES: scenario id + goal + hint (ordered)
+│   │   │   └── presets/           # shared: black-friday, celebrity-tweet, az-outage; Quick-only: starter, quick-*.json
 │   │   ├── grading/
 │   │   │   └── rubric.ts         # per-phase rubric with 1–5 anchors (requirements/API/HLD/deep-dive)
 │   │   └── actions/
 │   │       └── recorder.ts       # records ActionEvents (node added, config changed, note edited...)
 │   ├── persistence/
-│   │   └── local.ts              # shell util: localStorage autosave + JSON file export/import
+│   │   ├── local.ts              # localStorage autosave + JSON export/import; DesignRecord.mode
+│   │   └── challenges.ts         # Quick challenge solved state (bp:challenges:solved)
 │   └── stores/
 │       ├── design-store.ts       # zustand: graph, selection
 │       ├── scenario-store.ts     # zustand: selected preset + edited NFRs
@@ -98,7 +137,10 @@ app/
 │   ├── node-models.test.ts
 │   └── verdict.test.ts
 ├── e2e/
-│   └── smoke.spec.ts             # Playwright: landing → design → Run → verdict (production build)
+│   ├── smoke.spec.ts             # Playwright: landing → design → Run → verdict (production build)
+│   ├── landing.spec.ts           # Quick card opens the starter in one click; landing import keeps the file's mode
+│   ├── quick.spec.ts             # Quick design → simple workspace → Run → plain verdict
+│   └── quick-to-practice.spec.ts # Quick → Run → Passed → "Try a full practice interview" → fresh Practice design
 ├── scripts/
 │   └── sim.ts                     # headless CLI: graph + scenario → verdict (npm run sim)
 └── examples/                      # demo inputs for the CLI (twitter.json, black-friday.json)
@@ -111,3 +153,4 @@ app/
 - 2026-07-12: Next.js **16.2** (current stable), not 15 — spec predated the release; create-next-app ships 16 and bundles migration docs in `node_modules/next/dist/docs/` (see `app/AGENTS.md` warning).
 - 2026-07-12: **DB and auth dropped** — local-first app, no server state. localStorage autosaves; designs/runs/scorecards export as JSON files the grader imports on the review screen. Postgres/Drizzle/docker-compose removed from `app/` (removal commit `5f02d71`, code recoverable from `5de2a01`). A DB may return post-MVP (hosting/accounts/AI grading) — all boundary types are JSON-serializable, so the migration stays mechanical; see [[02-data-model]] "If a database returns".
 - 2026-07-12: Grading is human-first. The grader "watches" the candidate via the recorded action timeline + sim replay and fills a rubric scorecard. AI grading (Claude API) moved to far-future premium — removes API cost, prompt engineering, and trust questions from MVP.
+- 2026-11-05 (M7): Product split into Quick / Practice / Interview modes (spec: product-modes design). Mode is shell data on DesignRecord; one route, layout chosen by mode; engines stay mode-unaware. Quick → Practice creates a new blank Practice design in place (router.push + phase-clock reset; sim and scenario reset by leaving the Quick layout). No conversion in v1.

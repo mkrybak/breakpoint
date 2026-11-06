@@ -41,8 +41,8 @@ The design is not a drawing — it's a typed graph (React Flow JSON). That makes
 - [x] [[tasks/M4-interview-flow\|M4 — Interview flow & human grading]] ✅ 2026-07-15
 - [x] [[tasks/M5-persistence-and-deploy\|M5 — Export/import & deploy]] ✅ 2026-07-19
 - [x] [[tasks/M6-post-mvp-features\|M6 — Post-MVP features]] ✅ 2026-07-19 (T-6.1 auto-balancing LB)
-- [ ] [[tasks/M7-quick-mode\|M7 — Quick mode]] ← next
-- [ ] [[tasks/M8-trustworthy-simulation\|M8 — Trustworthy simulation]]
+- [x] [[tasks/M7-quick-mode\|M7 — Quick mode]] ✅ 2026-11-05
+- [ ] [[tasks/M8-trustworthy-simulation\|M8 — Trustworthy simulation]] ← next
 - [ ] [[tasks/M9-components-and-cost\|M9 — More components + cost]]
 - [ ] [[tasks/M10-practice-depth\|M10 — Practice depth]]
 - [ ] [[tasks/M11-live-interview-mode\|M11 — Live Interview mode]]
