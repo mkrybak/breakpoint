@@ -28,9 +28,9 @@ The design is not a drawing — it's a typed graph (React Flow JSON). That makes
 | [[05-engines]] | Engine-style module boundaries, extension points, dependency budget |
 | [[04-roadmap]] | Milestones M0–M11, dependency order, parked ideas |
 | [[process/sdlc\|SDLC process]] | How I work through tasks with Claude Code |
-| [[process/claude-workflow\|Claude workflow]] | Model split: /plan (Fable) → /implement (Sonnet), /ui (Fable) |
+| [[process/claude-workflow\|Claude workflow]] | `/build`: lead agent plans + implements a milestone via helper agents (Opus 5.5) |
 | `tasks/` | One note per milestone, checkboxes per task |
-| `plans/` | Per-task implementation plans, the Fable→Sonnet handoff artifact |
+| `plans/` | Per-task implementation plans, the planner → implementer handoff |
 
 ## Status board
 

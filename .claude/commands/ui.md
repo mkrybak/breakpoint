@@ -1,11 +1,11 @@
 ---
-description: Implement a UI task to the design quality bar (run in the Fable session; user reviews in browser)
+description: Implement a UI task to the design quality bar (manual, hands-on — user reviews in browser; /build handles UI tasks automatically)
 argument-hint: task id or component description
 ---
 
 # /ui — build UI for: $ARGUMENTS
 
-UI tasks skip the plan→Sonnet handoff: you (the strongest model) design and implement directly. The user judges the result in their browser — you never declare it beautiful yourself.
+Use this when you want to iterate on a UI by hand; `/build` handles UI tasks on its own with screenshot review. Here you design and implement directly. The user judges the result in their browser — you never declare it beautiful yourself.
 
 ## Steps
 

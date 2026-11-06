@@ -2,30 +2,48 @@
 tags: [process, claude]
 ---
 
-# Claude Code workflow — model split
+# Claude Code workflow — `/build` lead + helper agents
 
-Fable (strongest model) does the thinking, Sonnet (cheaper) does the typing, UI stays with Fable because taste doesn't delegate. The handoff artifact is a plan file in `plans/`.
+One command runs a milestone end-to-end on **Opus 5.5**. A lead agent (your session) owns every decision and delegates the reading-heavy work to helper agents, so its own context stays fresh across a whole milestone. You're pulled in only for calls that are genuinely yours.
 
-## The three commands
-
-| Command | Session model | What it does |
-|---|---|---|
-| `/plan T-x.y` | Fable | Reads specs + task + current code, writes `plans/T-x.y.md` — code-level detail, all decisions made. Writes no app code. |
-| `/implement T-x.y` | any (frontmatter forces **Sonnet**) | Executes `plans/T-x.y.md` exactly. Stops and reports if the plan disagrees with reality. Verifies, commits `Mx-Ty:`, ticks the checkbox. |
-| `/ui <task>` | Fable | Implements UI directly to the design standard in the command. User reviews at localhost and gives feedback; no self-declared beauty. |
-
-## Loop per task
+## The command
 
 ```
-Fable session:  /plan T-2.3   → review plans/T-2.3.md yourself
-Sonnet session: /implement T-2.3 → review the diff, done
-UI tasks:       /ui T-1.2     → open localhost, comment, iterate
+/build M7               # every unticked task in the milestone
+/build T-7.2..T-7.4     # a range
+/build T-7.3            # one task
 ```
 
-- `/implement` carries `model: claude-sonnet-5` frontmatter, so it uses Sonnet even if you run it inside the Fable session — a second session is optional, not required.
-- If `/implement` reports a plan/reality mismatch, fix the plan in the Fable session (`/plan` again), don't patch live in the Sonnet session.
-- Plan files are disposable once the task is committed — the vault specs stay the source of truth ([[process/sdlc|SDLC]] rules apply: spec notes get updated when reality wins).
+| Who | Defined in | Does | Talks to |
+|---|---|---|---|
+| **Lead** | `.claude/commands/build.md` | Scopes the batch, reviews plans together, reviews diffs and screenshots, answers helper questions, commits `Mx-Ty:` on main, ticks boxes, logs its calls | you and helpers |
+| **task-planner** | `.claude/agents/task-planner.md` | Writes one `plans/T-x.y.md`; no app code | lead only |
+| **task-implementer** | `.claude/agents/task-implementer.md` | Executes one plan, runs verification, screenshots UI; never commits | lead only |
+
+## Flow
+
+```
+/build M7
+  ├─ plan:       planners in parallel → lead answers their questions → lead reviews all plans together
+  ├─ implement:  one task at a time → implementer → lead reviews diff + reruns checks (+ screenshots for UI)
+  │              → commit Mx-Ty on main → tick → log lead calls in the milestone Decisions
+  └─ report:     commits, lead calls to review, screenshots, routes to try
+```
+
+- **Helper questions** go to the lead, which answers by messaging the same helper (its context is kept). Plan/code mismatches are fixed in the plan by the lead, never improvised by the implementer.
+- **The lead asks you** (batched, with a recommended option) only about how something should work or feel for the user, or a big product/architecture decision: reversing a logged decision, a new runtime dependency, a breaking file-format change, anything adding server state.
+- **It stops** when the batch is done, when a task is still failing after two fix rounds by the lead, or when you say so.
+- **UI tasks** are checked by screenshots (`screenshots/T-x.y/`, git-ignored) against the design standard in `task-implementer.md`. You see them in the final report and give feedback afterwards.
+- **Lead calls** are logged as `- YYYY-MM-DD (T-x.y, lead call): …` in the milestone's `## Decisions`, so you can review every decision you didn't make yourself.
+
+## Manual tools (still available)
+
+| Command | When |
+|---|---|
+| `/plan T-x.y` | Write a single plan by hand and read it before anything runs; `/build T-x.y` then implements it (existing plans are reused) |
+| `/ui T-x.y` | Hands-on UI iteration where you review in the browser as it goes |
 
 ## Decisions
 
-- 2026-07-12: Two-session plan handoff over subagent orchestration — cheaper, and the human reviews between plan and code. UI verification is manual browser review, no Playwright loop.
+- 2026-07-12: Two-session plan handoff (Fable plans, Sonnet implements) over subagent orchestration — cheaper, and the human reviews between plan and code.
+- 2026-11-05: **Replaced** by `/build`: one model (Opus 5.5) for planning and implementation; a lead agent delegates to planner/implementer helpers that report only to it. The human is consulted only for user-facing or big product/architecture calls and reviews results at the end. `/implement` (Sonnet-forced) removed; `/plan` and `/ui` kept as manual tools. Why: the manual plan → review → implement loop per task was the bottleneck, and one strong model removes the plan-for-a-weaker-model overhead.

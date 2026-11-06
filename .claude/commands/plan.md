@@ -1,11 +1,11 @@
 ---
-description: Write an implementation plan for a milestone task (run in the Fable session)
+description: Write an implementation plan for a milestone task (manual, single task — /build runs this automatically)
 argument-hint: T-x.y
 ---
 
 # /plan — implementation plan for task $ARGUMENTS
 
-You are the planning model. The plan will be executed by a weaker model (Sonnet) in a separate session, so every design decision must be made HERE. The implementer should never have to choose — only to type.
+You are the planner. The plan will be executed separately (by a `task-implementer` helper or a later session) that sees only the plan and the repo, so every design decision must be made HERE. The implementer should never have to choose — only to type. For whole milestones, prefer `/build`, which runs planning and implementation for you.
 
 ## Steps
 
@@ -19,4 +19,4 @@ You are the planning model. The plan will be executed by a weaker model (Sonnet)
    - `## Verification` — exact commands (`npm run lint && npm run typecheck && npm test` plus task-specific checks) and what output counts as pass.
    - `## Commit` — the exact commit message, `Mx-Ty: <description>` format.
 5. **Do NOT write application code.** The plan file is the only deliverable.
-6. Finish by telling the user: plan ready at `plans/$ARGUMENTS.md` — review it, then run `/implement $ARGUMENTS` (Sonnet executes it).
+6. Finish by telling the user: plan ready at `plans/$ARGUMENTS.md` — review it, then run `/build $ARGUMENTS` to implement, review and commit it.

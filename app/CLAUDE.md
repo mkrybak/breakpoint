@@ -13,7 +13,7 @@ System design interview platform: canvas (React Flow) + live stress-test simulat
 | `../03-simulation-engine.md` | Anything in `src/lib/simulation` |
 | `../05-engines.md` | Module boundaries — read before adding imports or deps |
 | `../tasks/M*.md` | The task you're implementing, with acceptance criteria |
-| `../process/claude-workflow.md` | The /plan → /implement → /ui workflow |
+| `../process/claude-workflow.md` | The `/build` lead + helper-agents workflow |
 
 ## Engine rules (enforced by dependency-cruiser, fails lint)
 

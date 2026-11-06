@@ -27,10 +27,10 @@ Rules:
 
 Model split and commands: [[claude-workflow]].
 
-1. Open the milestone note, pick the top unchecked task.
-2. In a Fable session: `/plan T-2.3` → review the generated `plans/T-2.3.md`.
-3. Run `/implement T-2.3` (forces Sonnet) to execute the plan. UI tasks instead: `/ui T-2.3` in the Fable session, review at localhost.
-4. Review the diff yourself before committing — every task ends with a commit.
+1. Run `/build M7` (or a range like `/build T-7.2..T-7.4`). The lead agent plans the unticked tasks, implements them one at a time, reviews, commits and ticks each.
+2. Answer its questions when it stops — it only asks about user-facing behaviour or big product/architecture calls.
+3. Read the final report: commits, the lead's logged calls, screenshots, routes to try. Give feedback; changes become new tasks or a follow-up `/build`.
+4. Manual fallback for a single task: `/plan T-x.y` then `/build T-x.y`; hands-on UI iteration: `/ui T-x.y`.
 5. Commit message: `M2-T3: short description` (milestone-task prefix makes history greppable).
 6. Tick the checkbox, add a one-line note under the task if anything deviated from plan.
 
