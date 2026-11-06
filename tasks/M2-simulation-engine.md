@@ -1,6 +1,6 @@
 ---
 tags: [milestone]
-status: active
+status: done
 milestone: M2
 depends-on: M1
 ---

@@ -1,6 +1,6 @@
 ---
 tags: [milestone]
-status: planning
+status: done
 milestone: M4
 depends-on: M3
 ---

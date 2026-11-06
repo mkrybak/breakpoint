@@ -1,6 +1,6 @@
 ---
 tags: [project, breakpoint]
-status: planning
+status: active
 created: 2026-07-12
 ---
 
@@ -26,7 +26,7 @@ The design is not a drawing — it's a typed graph (React Flow JSON). That makes
 | [[02-data-model]] | TypeScript types + persistence shapes (component registry, graph, scenarios) |
 | [[03-simulation-engine]] | Spec for the tick engine and stress rules |
 | [[05-engines]] | Engine-style module boundaries, extension points, dependency budget |
-| [[04-roadmap]] | Milestones M0–M5, dependency order, progress |
+| [[04-roadmap]] | Milestones M0–M5 (MVP), dependency order, post-MVP backlog |
 | [[process/sdlc\|SDLC process]] | How I work through tasks with Claude Code |
 | [[process/claude-workflow\|Claude workflow]] | Model split: /plan (Fable) → /implement (Sonnet), /ui (Fable) |
 | `tasks/` | One note per milestone, checkboxes per task |
@@ -35,11 +35,12 @@ The design is not a drawing — it's a typed graph (React Flow JSON). That makes
 ## Status board
 
 - [x] [[tasks/M0-project-setup\|M0 — Project setup]] ✅ 2026-07-12
-- [ ] [[tasks/M1-canvas-and-palette\|M1 — Canvas & component palette]]
-- [ ] [[tasks/M2-simulation-engine\|M2 — Simulation engine]]
-- [ ] [[tasks/M3-stress-scenarios\|M3 — Stress scenarios & realtime viz]]
-- [ ] [[tasks/M4-interview-flow\|M4 — Interview flow & human grading]]
+- [x] [[tasks/M1-canvas-and-palette\|M1 — Canvas & component palette]] ✅ 2026-07-13
+- [x] [[tasks/M2-simulation-engine\|M2 — Simulation engine]] ✅ 2026-07-14
+- [x] [[tasks/M3-stress-scenarios\|M3 — Stress scenarios & realtime viz]] ✅ 2026-07-15
+- [x] [[tasks/M4-interview-flow\|M4 — Interview flow & human grading]] ✅ 2026-07-15
 - [x] [[tasks/M5-persistence-and-deploy\|M5 — Export/import & deploy]] ✅ 2026-07-19
+- [ ] [[tasks/M6-post-mvp-features\|M6 — Post-MVP features]] (ongoing; T-6.1 auto-balancing LB ✅ 2026-07-19)
 
 ## Conventions
 
