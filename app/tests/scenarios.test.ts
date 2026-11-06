@@ -1,13 +1,20 @@
 import { describe, expect, it } from "vitest";
 import type { DesignGraph, StressRule } from "../src/lib/core";
+import { starterGraph } from "../src/components/quick/starter";
+import { getComponentDef } from "../src/lib/registry";
 import {
   describeStressRule,
+  getQuickScenario,
   getScenarioPreset,
+  listQuickScenarios,
   listScenarioPresets,
   parseScenario,
+  QUICK_SCENARIOS,
   SCENARIO_PRESETS,
+  STARTER_SCENARIO,
 } from "../src/lib/scenarios";
 import { runSimulation } from "../src/lib/simulation";
+import { validateGraph } from "../src/lib/validation";
 
 const ruleKinds = (timeline: StressRule[]) =>
   timeline.map((rule) => rule.rule).sort();
@@ -123,5 +130,62 @@ describe("describeStressRule", () => {
     expect(describeStressRule({ at: 10, rule: "hotkey", skew: 0.5, forSec: 40 })).toBe(
       "at 10s — hotkey skew 0.5 for 40s",
     );
+  });
+});
+
+describe("quick scenarios + starter design", () => {
+  it("the Quick list starts with the starter and is separate from the shared presets", () => {
+    expect(QUICK_SCENARIOS[0]).toBe(STARTER_SCENARIO);
+    expect(listQuickScenarios()).toBe(QUICK_SCENARIOS);
+    expect(getQuickScenario("starter")).toBe(STARTER_SCENARIO);
+    expect(getQuickScenario("black-friday")).toBeUndefined();
+    expect(getScenarioPreset("starter")).toBeUndefined();
+    const presetIds = new Set(SCENARIO_PRESETS.map((s) => s.id));
+    const quickIds = QUICK_SCENARIOS.map((s) => s.id);
+    expect(new Set(quickIds).size).toBe(quickIds.length);
+    expect(quickIds.filter((id) => presetIds.has(id))).toEqual([]);
+  });
+
+  it("the starter scenario is gentle steady load, ~30s", () => {
+    expect(STARTER_SCENARIO.durationSec).toBe(30);
+    expect(STARTER_SCENARIO.timeline).toEqual([]);
+  });
+
+  it("the starter design is Client → App server → SQL database, wired, with no warnings", () => {
+    const graph = starterGraph();
+    expect(graph.nodes.map((n) => n.kind)).toEqual([
+      "client",
+      "app_server",
+      "db_sql",
+    ]);
+    expect(graph.entryNodeId).toBe("client");
+    expect(graph.edges.map((e) => [e.source, e.target])).toEqual([
+      ["client", "app"],
+      ["app", "db"],
+    ]);
+    expect(validateGraph(graph)).toEqual([]);
+    for (const node of graph.nodes) {
+      expect(Object.keys(node.config).sort()).toEqual(
+        getComponentDef(node.kind)
+          .configFields.map((f) => f.key)
+          .sort(),
+      );
+    }
+  });
+
+  it("starterGraph returns a fresh copy each call", () => {
+    const a = starterGraph();
+    a.nodes[1].config.replicas = 9;
+    expect(starterGraph().nodes[1].config.replicas).toBe(1);
+  });
+
+  it("runSimulation(starter, starterScenario) passes with headroom, deterministically", () => {
+    const result = runSimulation(starterGraph(), STARTER_SCENARIO);
+    expect(result.verdict.passed).toBe(true);
+    expect(result.frames.length).toBe(STARTER_SCENARIO.durationSec * 10);
+    const worstP95 = Math.max(...result.frames.map((f) => f.p95Ms));
+    expect(worstP95).toBeLessThan(STARTER_SCENARIO.pass.p95Ms / 2);
+    expect(result.frames.every((f) => f.errorRate === 0)).toBe(true);
+    expect(runSimulation(starterGraph(), STARTER_SCENARIO)).toEqual(result);
   });
 });

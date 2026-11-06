@@ -1,0 +1,11 @@
+{
+  "id": "starter",
+  "name": "Steady traffic",
+  "description": "A calm, steady stream of visitors. Watch each request travel from the client through the app server to the database and back.",
+  "durationSec": 30,
+  "baseRps": 1500,
+  "readRatio": 0.8,
+  "timeline": [],
+  "pass": { "p95Ms": 200, "maxErrorRate": 0.01 },
+  "seed": 1
+}

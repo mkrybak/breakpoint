@@ -2,6 +2,7 @@ import type { Scenario, StressRule } from "@/lib/core";
 import azOutage from "./presets/az-outage.json";
 import blackFriday from "./presets/black-friday.json";
 import celebrityTweet from "./presets/celebrity-tweet.json";
+import starter from "./presets/starter.json";
 
 function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null;
@@ -125,6 +126,25 @@ export function listScenarioPresets(): readonly Scenario[] {
 
 export function getScenarioPreset(id: string): Scenario | undefined {
   return SCENARIO_PRESETS.find((scenario) => scenario.id === id);
+}
+
+/** Quick mode's first scenario: steady load the starter design passes. */
+export const STARTER_SCENARIO: Scenario = requirePreset(starter);
+
+/**
+ * Scenarios offered only in Quick mode, kept apart from SCENARIO_PRESETS
+ * (Practice's picker and the landing page never list these). Order is
+ * the display order; the starter stays first. To add one: drop a JSON
+ * file in presets/ and append one requirePreset(...) entry here.
+ */
+export const QUICK_SCENARIOS: readonly Scenario[] = [STARTER_SCENARIO];
+
+export function listQuickScenarios(): readonly Scenario[] {
+  return QUICK_SCENARIOS;
+}
+
+export function getQuickScenario(id: string): Scenario | undefined {
+  return QUICK_SCENARIOS.find((scenario) => scenario.id === id);
 }
 
 /** One human-readable timeline line for the ScenarioPanel preview. */

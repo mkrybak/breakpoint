@@ -30,7 +30,8 @@ depends-on: M6
 **Accept:** `DesignRecord.mode: "quick" | "practice" | "interview"`. Records and imports without the field load as `"practice"` (no migration). `buildDesignRecord` takes the mode. Export round-trips it. Engines (`src/lib/**`) stay mode-unaware.
 
 ### T-7.3 — Starter design + starter scenario
-- [ ] T-7.3 done
+- [x] T-7.3 done
+  - Starter graph lives in the shell (`src/components/quick/starter.ts`, + `QUICK_DESIGN_NAME`); Quick list = `QUICK_SCENARIOS` in `scenarios/index.ts`; `05-engines` extension row added.
 
 **Files:** `src/lib/scenarios/presets/starter.json`, starter graph data (shell or scenarios engine, the plan decides), `tests/scenarios.test.ts`
 **Accept:** Client → App server → SQL database, wired and configured. A gentle steady-load starter scenario (~30s). A test asserts `runSimulation(starter, starterScenario)` **passes**, so the first impression is green.
@@ -65,3 +66,4 @@ depends-on: M6
 - 2026-11-05: Desktop-only. No responsive layout or touch drag in M7; the existing `SmallScreenNotice` stays for Quick mode too.
 - 2026-11-05 (T-7.1, lead call): restore the `libc` fields npm 10.9 stripped from existing lockfile entries, so the lockfile diff only adds Playwright — keeps CI's `npm ci` on other platforms unchanged.
 - 2026-11-05 (T-7.2, lead call): `buildDesignRecord`'s `mode` is a required positional argument (no default), so no save path can silently write "practice" over a Quick design; unknown mode values load as "practice" like a missing one.
+- 2026-11-05 (T-7.3, lead call): starter = 1 app-server replica at ~37% load under 1500 RPS steady (p95 30ms vs 200ms budget); the starter *graph* is shell data in `components/quick/starter.ts`, Quick scenarios a separate data list in the scenarios engine — a graph isn't a scenario, and the default name is UI copy.
