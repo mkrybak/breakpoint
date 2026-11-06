@@ -353,11 +353,12 @@ export const useDesignStore = create<DesignStore>((set) => ({
 /**
  * Stamp a draft action with the interview clock (phase-store) and append it to the
  * attached design's log. No-ops when no design is attached, so recording only
- * happens during a live interview.
+ * happens during a live interview. Quick designs never record.
  */
 export function recordInterviewAction(draft: DraftAction): void {
   const store = useDesignStore.getState();
-  if (store.designId === null) return;
+  // Quick mode has no interview timeline (T-7.5): nothing is recorded.
+  if (store.designId === null || store.designMode === "quick") return;
   const { elapsedSec, phase } = usePhaseStore.getState();
   store.recordAction(stampAction(draft, elapsedSec, phase));
 }

@@ -44,7 +44,8 @@ depends-on: M6
 **Accept:** Three cards: Quick simulation (first, most prominent), Practice, and Interview (shown as "coming soon" until M11). Quick creates a design from the starter in one click (default name, no naming step) and opens it. Practice keeps today's create flow. The saved-designs list shows a mode badge per design. Run via `/ui`.
 
 ### T-7.5 — Quick mode workspace layout
-- [ ] T-7.5 done
+- [x] T-7.5 done
+  - Layouts in `src/components/layout/{DesignWorkspace,PracticeWorkspace}.tsx` + `src/components/quick/`; attach moved NodeConfigPanel → DesignWorkspace; recording gated in `recordInterviewAction`; chaos list → `panels/chaos-actions.ts`; `e2e/quick.spec.ts` added. Deviation: "More scenarios" is hidden while a run is live (plan had it always shown) — the bar overflowed at 1440px with both menus.
 
 **Files:** `src/app/design/[id]/page.tsx`, new Quick layout component, `src/components/hud/MetricsBar.tsx`
 **Accept:** `/design/[id]` renders by mode. Quick has no phase bar, phase notes, requirements panel, review link or canvas lock, and no action recording. The HUD is simplified to served RPS, p95 and error %, and the verdict uses plain language. Run is the visually dominant action. Scenario choice sits behind "More scenarios" and chaos behind "Break it"; both are hidden, not disabled. Practice renders exactly as today. Run via `/ui`.
@@ -71,3 +72,6 @@ depends-on: M6
 - 2026-11-05 (T-7.4, lead call): the landing page gets an "Import design" button that always creates a new design keeping the file's mode — the spec's import rule assumes it, and without it an exported Quick design can't come back as Quick.
 - 2026-11-05 (T-7.4, lead call): Quick default names are numbered when taken ("Quick simulation 2"); Practice keeps today's naming. Quick rows have no Review link (Quick has no review screen). Built-in stress tests move below "Your designs".
 - 2026-11-05 (T-7.4, lead call): creating or importing a design from the landing page resets the global phase clock, so a new Practice design starts at Requirements instead of inheriting the last session's phase (pre-existing bug for *new* designs; opening an existing design still inherits it — backlog).
+- 2026-11-05 (T-7.5, lead call): Quick's HUD controls swap by run state — "More scenarios" when no run is live, "Break it" only while running/paused. Both menus plus Pause/Stop and three metrics overflowed the 672px main column at 1440×900; picking a scenario mid-run would kill the run anyway.
+- 2026-11-05 (T-7.5, lead call): Quick opens on the starter scenario every time (the selection isn't persisted); leaving Quick resets the sim and restores Practice's default preset. The plain verdict keeps the `Passed`/`Failed` headline, adds one sentence per failure plus a canvas tip, and hides advisories (grader hints).
+- 2026-11-05 (T-7.5, lead call): `/design/[id]` renders a blank frame until the design is attached (mode lives in localStorage), so Practice's server HTML is blank for one frame; after hydration Practice is pixel-identical (verified by image diff).

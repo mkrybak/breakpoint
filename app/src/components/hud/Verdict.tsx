@@ -1,6 +1,11 @@
 "use client";
 
-import { describeRunStatus, type RunTone } from "@/components/hud/hud-format";
+import { CircleCheck, CircleX } from "lucide-react";
+import {
+  describeRunStatus,
+  describeVerdictPlainly,
+  type RunTone,
+} from "@/components/hud/hud-format";
 import { useSimStore } from "@/stores/sim-store";
 
 const TONE: Record<RunTone, string> = {
@@ -10,13 +15,62 @@ const TONE: Record<RunTone, string> = {
   fail: "border-red-500/50 bg-red-500/10 text-red-200",
 };
 
-export function Verdict() {
+export function Verdict({
+  variant = "full",
+}: {
+  /** "plain": Quick mode's plain-language card (T-7.5) */
+  variant?: "full" | "plain";
+} = {}) {
   const status = useSimStore((s) => s.status);
   const result = useSimStore((s) => s.result);
+  const runScenario = useSimStore((s) => s.runScenario);
 
   if (status === "idle") return null;
 
   const { label, tone } = describeRunStatus(status, result);
+
+  if (variant === "plain") {
+    const lines =
+      status === "done" && result && runScenario
+        ? describeVerdictPlainly(result.verdict, runScenario)
+        : (status === "running" || status === "paused") && runScenario
+          ? [
+              `Simulating “${runScenario.name}” (${runScenario.durationSec}s of traffic).`,
+            ]
+          : [];
+    return (
+      <div
+        role="status"
+        aria-live="polite"
+        className={`pointer-events-auto max-w-md rounded-xl border px-4 py-2.5 shadow-lg backdrop-blur ${TONE[tone]}`}
+      >
+        <div className="flex items-center gap-2">
+          {tone === "pass" ? (
+            <CircleCheck className="h-4 w-4" />
+          ) : tone === "fail" ? (
+            <CircleX className="h-4 w-4" />
+          ) : (
+            <span
+              className={`h-2 w-2 rounded-full bg-current ${
+                tone === "running" && status === "running" ? "animate-pulse" : ""
+              }`}
+            />
+          )}
+          <span className="text-sm font-semibold">{label}</span>
+        </div>
+        {lines.length > 0 && (
+          <ul className="mt-1.5 space-y-1">
+            {lines.map((l) => (
+              <li key={l} className="text-xs leading-snug text-neutral-200">
+                {l}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    );
+  }
+
   const verdict = result?.verdict ?? null;
 
   return (

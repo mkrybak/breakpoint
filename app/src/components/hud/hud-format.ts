@@ -1,4 +1,4 @@
-import type { RunResult } from "@/lib/core";
+import type { RunResult, Scenario, Verdict, VerdictFailure } from "@/lib/core";
 import type { SimStatus } from "@/stores/sim-store";
 
 /** p95 latency → "142 ms". */
@@ -58,4 +58,66 @@ export function describeRunStatus(
     default:
       return { label: "Idle", tone: "idle" };
   }
+}
+
+/** Budget rate 0–1 → "1%", "0.5%" (no trailing zeros). */
+export function formatBudgetPct(rate: number): string {
+  return `${Number((rate * 100).toFixed(2))}%`;
+}
+
+/** Sim seconds → "12.3s" ("4s", not "4.0s"). */
+export function formatSec(t: number): string {
+  return `${Number(t.toFixed(1))}s`;
+}
+
+/** Quick mode's read-only goal line, e.g. "Keep p95 under 200 ms and errors under 1%." */
+export function describeScenarioGoal(scenario: Scenario): string {
+  let goal = `Keep p95 under ${scenario.pass.p95Ms} ms and errors under ${formatBudgetPct(scenario.pass.maxErrorRate)}`;
+  if ((scenario.pass.minSurvivedKills ?? 0) >= 1) {
+    goal += ", even when a server goes down";
+  }
+  if (scenario.pass.consistency === "strong") {
+    goal += ", with strongly consistent reads";
+  }
+  return `${goal}.`;
+}
+
+const PLAIN_FAILURE: Record<
+  string,
+  (f: VerdictFailure, s: Scenario) => string
+> = {
+  p95: (f, s) =>
+    `Responses got too slow: p95 stayed above ${s.pass.p95Ms} ms for too long, starting at ${formatSec(f.atSec)}.`,
+  "error-rate": (f, s) =>
+    `Too many requests failed: errors went over ${formatBudgetPct(s.pass.maxErrorRate)} at ${formatSec(f.atSec)}.`,
+  "kill-survival": (f, s) =>
+    `Losing a server hurt users: errors went over ${formatBudgetPct(s.pass.maxErrorRate)} at ${formatSec(f.atSec)}, right after it went down.`,
+  consistency: () =>
+    "Some reads can return stale data, but this scenario needs strong consistency.",
+};
+
+export const PLAIN_CAPACITY_TIP =
+  "Look at the canvas: red nodes ran out of capacity, grey ones went down. Select a node to change its settings.";
+
+/**
+ * Quick mode's plain-language verdict lines (the headline stays describeRunStatus's
+ * "Passed"/"Failed"). Unknown criteria fall back to the engine's detail string.
+ * Advisories are omitted: they're grader hints.
+ */
+export function describeVerdictPlainly(
+  verdict: Verdict,
+  scenario: Scenario,
+): string[] {
+  if (verdict.passed) {
+    return [
+      `Your design handled “${scenario.name}”: p95 stayed under ${scenario.pass.p95Ms} ms and errors under ${formatBudgetPct(scenario.pass.maxErrorRate)}.`,
+    ];
+  }
+  const lines = verdict.failures.map(
+    (f) => PLAIN_FAILURE[f.criterion]?.(f, scenario) ?? f.detail,
+  );
+  if (verdict.failures.some((f) => f.criterion !== "consistency")) {
+    lines.push(PLAIN_CAPACITY_TIP);
+  }
+  return [...new Set(lines)];
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type ChangeEvent } from "react";
+import { useRef, useState, type ChangeEvent } from "react";
 import type { ConfigField, DesignNode } from "@/lib/core";
 import { getComponentDef } from "@/lib/registry";
 import {
@@ -18,7 +18,6 @@ const INPUT =
   "mt-1 w-full rounded border border-neutral-700 bg-neutral-800 px-2 py-1 text-xs text-neutral-100";
 
 export function NodeConfigPanel({ designId }: { designId: string }) {
-  const attachDesign = useDesignStore((s) => s.attachDesign);
   const importRecord = useDesignStore((s) => s.importRecord);
   const graph = useDesignStore((s) => s.graph);
   const designName = useDesignStore((s) => s.designName);
@@ -28,10 +27,6 @@ export function NodeConfigPanel({ designId }: { designId: string }) {
   const selectedNodeIds = useDesignStore((s) => s.selectedNodeIds);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [importError, setImportError] = useState<string | null>(null);
-
-  useEffect(() => {
-    attachDesign(designId);
-  }, [attachDesign, designId]);
 
   const selected =
     selectedNodeIds.length === 1

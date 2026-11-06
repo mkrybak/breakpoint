@@ -9,6 +9,8 @@ interface ScenarioStore {
   scenario: Scenario;
   /** Replace the working scenario with a fresh clone of a preset. */
   selectPreset: (id: string) => void;
+  /** Replace the working scenario with a clone of any scenario (Quick mode's own list, T-7.5). */
+  setScenario: (scenario: Scenario) => void;
   /** Edit the offered base load (RequirementsPanel). */
   setBaseRps: (rps: number) => void;
   /** Patch the numeric NFR budgets (RequirementsPanel). */
@@ -24,6 +26,9 @@ export const useScenarioStore = create<ScenarioStore>((set) => ({
     set(() => ({
       scenario: structuredClone(getScenarioPreset(id) ?? DEFAULT_PRESET),
     })),
+
+  setScenario: (scenario) =>
+    set(() => ({ scenario: structuredClone(scenario) })),
 
   setBaseRps: (rps) =>
     set((s) => ({ scenario: { ...s.scenario, baseRps: rps } })),

@@ -31,7 +31,13 @@ function isComponentKind(value: string): value is ComponentKind {
   return (COMPONENT_KINDS as string[]).includes(value);
 }
 
-function CanvasInner({ designId }: { designId: string }) {
+function CanvasInner({
+  designId,
+  lockable,
+}: {
+  designId: string;
+  lockable: boolean;
+}) {
   const graph = useDesignStore((s) => s.graph);
   const selectedNodeIds = useDesignStore((s) => s.selectedNodeIds);
   const selectedEdgeIds = useDesignStore((s) => s.selectedEdgeIds);
@@ -41,7 +47,8 @@ function CanvasInner({ designId }: { designId: string }) {
   const onConnect = useDesignStore((s) => s.onConnect);
   const addNode = useDesignStore((s) => s.addNode);
   const { screenToFlowPosition } = useReactFlow();
-  const locked = usePhaseStore((s) => isCanvasLocked(s.phase));
+  const phaseLocked = usePhaseStore((s) => isCanvasLocked(s.phase));
+  const locked = lockable && phaseLocked;
 
   const { nodes, edges } = useMemo(
     () => toFlow(graph, selectedNodeIds, measured, selectedEdgeIds),
@@ -128,10 +135,17 @@ function CanvasInner({ designId }: { designId: string }) {
   );
 }
 
-export function DesignCanvas({ designId }: { designId: string }) {
+export function DesignCanvas({
+  designId,
+  lockable = true,
+}: {
+  designId: string;
+  /** false in Quick mode: no phases, so never locked (T-7.5) */
+  lockable?: boolean;
+}) {
   return (
     <ReactFlowProvider>
-      <CanvasInner designId={designId} />
+      <CanvasInner designId={designId} lockable={lockable} />
     </ReactFlowProvider>
   );
 }

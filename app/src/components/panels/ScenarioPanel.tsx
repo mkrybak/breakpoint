@@ -1,8 +1,7 @@
 "use client";
 
-import { Skull, Waves, Zap, type LucideIcon } from "lucide-react";
 import { describeStressRule, listScenarioPresets } from "@/lib/scenarios";
-import type { StressRule } from "@/lib/core";
+import { CHAOS_ACTIONS } from "@/components/panels/chaos-actions";
 import { useScenarioStore } from "@/stores/scenario-store";
 import { useSimStore } from "@/stores/sim-store";
 
@@ -12,16 +11,6 @@ const FIELD_LABEL =
   "text-[10px] font-medium tracking-wider text-neutral-500 uppercase";
 const INPUT =
   "mt-1 w-full rounded border border-neutral-700 bg-neutral-800 px-2 py-1 text-xs text-neutral-100";
-
-const CHAOS_ACTIONS: { label: string; icon: LucideIcon; rule: StressRule }[] = [
-  {
-    label: "Kill server",
-    icon: Skull,
-    rule: { at: 0, rule: "kill", target: "app_server", count: 1 },
-  },
-  { label: "Flush cache", icon: Waves, rule: { at: 0, rule: "flush", target: "cache" } },
-  { label: "Spike ×3", icon: Zap, rule: { at: 0, rule: "spike", factor: 3, forSec: 5 } },
-];
 
 export function ScenarioPanel() {
   const scenario = useScenarioStore((s) => s.scenario);

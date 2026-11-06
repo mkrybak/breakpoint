@@ -1,7 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ActionEvent } from "../src/lib/core";
 import { buildDesignRecord, designStorageKey } from "../src/persistence/local";
-import { useDesignStore } from "../src/stores/design-store";
+import { simRunAction } from "../src/lib/actions";
+import {
+  recordInterviewAction,
+  useDesignStore,
+} from "../src/stores/design-store";
 import { usePhaseStore } from "../src/stores/phase-store";
 
 function createStorageMock() {
@@ -142,5 +146,26 @@ describe("action recording", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe("quick mode (T-7.5)", () => {
+  it("records nothing for a quick design: edits, phase changes or runs", () => {
+    const record = buildDesignRecord(
+      "q",
+      "Q",
+      { nodes: [], edges: [], entryNodeId: "" },
+      "quick",
+    );
+    localStorage.setItem(designStorageKey("q"), JSON.stringify(record));
+    useDesignStore.getState().attachDesign("q");
+
+    const store = useDesignStore.getState();
+    const id = store.addNode("app_server", { x: 0, y: 0 });
+    store.updateNodeConfig(id, "replicas", 2);
+    usePhaseStore.getState().skip();
+    recordInterviewAction(simRunAction("Steady traffic"));
+
+    expect(useDesignStore.getState().actionLog).toEqual([]);
   });
 });
