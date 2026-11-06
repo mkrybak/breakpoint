@@ -10,6 +10,7 @@
     "depgraph": "depcruise src --config .dependency-cruiser.cjs --output-type mermaid --output-to ../module-graph.mmd",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "e2e": "playwright test",
     "sim": "tsx scripts/sim.ts",
     "format": "prettier --write ."
   },
@@ -22,6 +23,7 @@
     "zustand": "^5.0.14"
   },
   "devDependencies": {
+    "@playwright/test": "^1.65.0",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",

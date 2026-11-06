@@ -34,6 +34,7 @@ npm run dev   # http://localhost:3000
 | `npm run lint` | ESLint + dependency-cruiser engine-boundary check |
 | `npm run typecheck` | `tsc --noEmit` |
 | `npm test` | Vitest suite, including the deterministic golden simulation tests |
+| `npm run e2e` | Playwright browser smoke test against a production build (first run: `npx playwright install chromium`) |
 | `npm run sim` | Headless CLI: graph + scenario → verdict (see `examples/`) |
 | `npm run depgraph` | Regenerate `../module-graph.mmd` |
 | `npm run format` | Prettier write |
@@ -43,6 +44,7 @@ npm run dev   # http://localhost:3000
 ```bash
 npm run lint && npm run typecheck && npm test
 npm run build   # deploy gate
+npm run e2e    # browser smoke test (builds first)
 ```
 
 ## Environment variables
@@ -56,8 +58,8 @@ and nothing to operate.
 
 `.github/workflows/ci.yml` runs on every push and pull request. On Node 22 — the
 same runtime as production — it runs `npm ci`, then `lint`, `typecheck`, `test`
-(including the golden simulation tests), and `build`. A green run means the
-commit is deployable.
+(including the golden simulation tests), `build`, and the Playwright smoke test
+(`e2e`). A green run means the commit is deployable.
 
 ## Deploy (Vercel)
 

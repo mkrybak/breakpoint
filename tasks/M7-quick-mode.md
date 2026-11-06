@@ -1,6 +1,6 @@
 ---
 tags: [milestone]
-status: planning
+status: active
 milestone: M7
 depends-on: M6
 ---
@@ -16,7 +16,8 @@ depends-on: M6
 ## Tasks
 
 ### T-7.1 — Browser smoke test
-- [ ] T-7.1 done
+- [x] T-7.1 done
+  - Also edited beyond Files: `app/.gitignore`, `app/eslint.config.mjs`, `app/.prettierignore` (ignore Playwright output), `app/README.md`, `05-engines.md`, `01-architecture.md` (docs). Lockfile `libc` fields stripped by local npm 10.9 were restored.
 
 **Files:** `app/e2e/smoke.spec.ts`, `app/playwright.config.ts`, `app/package.json`, `.github/workflows/ci.yml`
 **Accept:** One Playwright test: open landing → open a design built from `examples/twitter.json` → press Run → a verdict appears and at least one node changes state. `npm run e2e` runs it locally, and CI runs it after `build`. `@playwright/test` (dev-only) gets a dependency-budget entry in [[05-engines]]. Lands first because M7 reshuffles the UI and nothing automated covers canvas → worker → HUD today.
@@ -61,3 +62,4 @@ depends-on: M6
 
 - 2026-11-05: Quick mode ships before the simulation fixes (M8), per product priority. Challenges are chosen so they work with today's engine (no queue-buffering challenge until M8).
 - 2026-11-05: Desktop-only. No responsive layout or touch drag in M7; the existing `SmallScreenNotice` stays for Quick mode too.
+- 2026-11-05 (T-7.1, lead call): restore the `libc` fields npm 10.9 stripped from existing lockfile entries, so the lockfile diff only adds Playwright — keeps CI's `npm ci` on other platforms unchanged.

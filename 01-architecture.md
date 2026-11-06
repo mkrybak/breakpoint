@@ -97,6 +97,8 @@ app/
 │   ├── engine.test.ts            # deterministic scenarios → exact expected frames
 │   ├── node-models.test.ts
 │   └── verdict.test.ts
+├── e2e/
+│   └── smoke.spec.ts             # Playwright: landing → design → Run → verdict (production build)
 ├── scripts/
 │   └── sim.ts                     # headless CLI: graph + scenario → verdict (npm run sim)
 └── examples/                      # demo inputs for the CLI (twitter.json, black-friday.json)
