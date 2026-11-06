@@ -37,7 +37,8 @@ depends-on: M6
 **Accept:** Client → App server → SQL database, wired and configured. A gentle steady-load starter scenario (~30s). A test asserts `runSimulation(starter, starterScenario)` **passes**, so the first impression is green.
 
 ### T-7.4 — Landing page: three mode cards
-- [ ] T-7.4 done
+- [x] T-7.4 done
+  - Also added: `landing/new-design.ts`, `ModeBadge.tsx`, `styles.ts`, `tests/landing.test.ts`, `e2e/landing.spec.ts`; ScenarioCards copy; landing "Import design" (new design, file's mode); Quick rows have no Review link; new designs reset the global phase clock.
 
 **Files:** `src/components/landing/LandingScreen.tsx`, new mode-card component
 **Accept:** Three cards: Quick simulation (first, most prominent), Practice, and Interview (shown as "coming soon" until M11). Quick creates a design from the starter in one click (default name, no naming step) and opens it. Practice keeps today's create flow. The saved-designs list shows a mode badge per design. Run via `/ui`.
@@ -67,3 +68,6 @@ depends-on: M6
 - 2026-11-05 (T-7.1, lead call): restore the `libc` fields npm 10.9 stripped from existing lockfile entries, so the lockfile diff only adds Playwright — keeps CI's `npm ci` on other platforms unchanged.
 - 2026-11-05 (T-7.2, lead call): `buildDesignRecord`'s `mode` is a required positional argument (no default), so no save path can silently write "practice" over a Quick design; unknown mode values load as "practice" like a missing one.
 - 2026-11-05 (T-7.3, lead call): starter = 1 app-server replica at ~37% load under 1500 RPS steady (p95 30ms vs 200ms budget); the starter *graph* is shell data in `components/quick/starter.ts`, Quick scenarios a separate data list in the scenarios engine — a graph isn't a scenario, and the default name is UI copy.
+- 2026-11-05 (T-7.4, lead call): the landing page gets an "Import design" button that always creates a new design keeping the file's mode — the spec's import rule assumes it, and without it an exported Quick design can't come back as Quick.
+- 2026-11-05 (T-7.4, lead call): Quick default names are numbered when taken ("Quick simulation 2"); Practice keeps today's naming. Quick rows have no Review link (Quick has no review screen). Built-in stress tests move below "Your designs".
+- 2026-11-05 (T-7.4, lead call): creating or importing a design from the landing page resets the global phase clock, so a new Practice design starts at Requirements instead of inheriting the last session's phase (pre-existing bug for *new* designs; opening an existing design still inherits it — backlog).

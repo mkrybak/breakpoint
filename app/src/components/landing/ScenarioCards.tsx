@@ -5,13 +5,13 @@ const CARD = "rounded-xl border border-neutral-800 bg-neutral-900/60 p-4";
 export function ScenarioCards() {
   const scenarios = listScenarioPresets();
   return (
-    <section className="mb-8">
+    <section className="mb-10">
       <h2 className="mb-1 text-xs font-semibold tracking-wide text-neutral-400 uppercase">
         Built-in stress tests
       </h2>
       <p className="mb-3 text-xs text-neutral-500">
-        Every design is graded by surviving one of these. Pick a scenario inside
-        the workspace.
+        Practice designs are graded by surviving one of these. Pick a scenario
+        inside the workspace.
       </p>
       <ul className="grid gap-3 sm:grid-cols-2">
         {scenarios.map((s) => (
