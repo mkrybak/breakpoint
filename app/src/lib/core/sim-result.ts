@@ -27,6 +27,8 @@ export interface EdgeFrame {
   failRate?: number;
   /** phase that governed this tick's traffic; only on edges with a breaker (T-8.6) */
   breaker?: BreakerPhase;
+  /** T-12.1, breaker edges only, ticks the breaker rejected calls (open/half-open): RPS failed fast at the caller (already inside the source's `dropped`) */
+  failedFastRps?: number;
 }
 
 /** One per tick (100ms), streamed worker → UI. */
@@ -59,12 +61,26 @@ export interface VerdictFailure {
   detail: string;
 }
 
+/** A circuit breaker on the client's sync path that failed calls fast during the run (T-12.1). */
+export interface BreakerTrip {
+  edgeId: string;
+  sourceLabel: string;
+  targetId: string;
+  targetLabel: string;
+  /** calls the breaker rejected over the run (Σ failedFastRps ÷ ticks/s) */
+  failedFast: number;
+  /** t of the first frame of the final all-closed stretch; null = not closed at the end */
+  recoveredAtSec: number | null;
+}
+
 /** Evaluated over the whole run (03-simulation-engine "Verdict"). */
 export interface Verdict {
   passed: boolean;
   failures: VerdictFailure[];
   /** don't fail the run — shown to the grader */
   advisories: string[];
+  /** present only when non-empty; most failed-fast first */
+  breakerTrips?: BreakerTrip[];
 }
 
 export interface RunResult {

@@ -1,11 +1,19 @@
 import { describe, expect, it } from "vitest";
-import type { DesignGraph, RunResult, Scenario, Verdict } from "@/lib/core";
+import type {
+  BreakerTrip,
+  DesignGraph,
+  RunResult,
+  Scenario,
+  Verdict,
+} from "@/lib/core";
 import {
+  breakerTripsBehindErrors,
   classifyLogSeverity,
   describeRunStatus,
   describeScenarioGoal,
   describeVerdictPlainly,
   formatBudgetPct,
+  formatCount,
   formatLag,
   formatMs,
   formatPct,
@@ -296,5 +304,69 @@ describe("describeVerdictPlainly", () => {
       "Too many requests failed: errors went over 1% at 5s.",
       PLAIN_CAPACITY_TIP,
     ]);
+  });
+});
+
+describe("breaker trips in the verdict (T-12.1)", () => {
+  const trip: BreakerTrip = {
+    edgeId: "e-app-pay",
+    sourceLabel: "App fleet",
+    targetId: "pay",
+    targetLabel: "Payments API",
+    failedFast: 43986,
+    recoveredAtSec: 21.4,
+  };
+  const withTrips = (
+    failures: Verdict["failures"],
+    trips: BreakerTrip[] = [trip],
+  ): Verdict => ({ ...failed(failures), breakerTrips: trips });
+  const errors = [{ criterion: "error-rate", atSec: 10.3, detail: "x" }];
+
+  it("formatCount k-suffixes without a trailing .0", () => {
+    expect(formatCount(950)).toBe("950");
+    expect(formatCount(9000)).toBe("9k");
+    expect(formatCount(43986)).toBe("44k");
+    expect(formatCount(12345)).toBe("12.3k");
+  });
+
+  it("breakerTripsBehindErrors gates on an error failure", () => {
+    expect(
+      breakerTripsBehindErrors({
+        passed: true,
+        failures: [],
+        advisories: [],
+        breakerTrips: [trip],
+      }),
+    ).toEqual([]);
+    expect(
+      breakerTripsBehindErrors(
+        withTrips([{ criterion: "p95", atSec: 4, detail: "x" }]),
+      ),
+    ).toEqual([]);
+    expect(breakerTripsBehindErrors(withTrips(errors))).toEqual([trip]);
+    expect(
+      breakerTripsBehindErrors({
+        ...failed(errors),
+        breakerTrips: "nope" as unknown as BreakerTrip[],
+      }),
+    ).toEqual([]);
+  });
+
+  it("credits a recovered breaker instead of the capacity tip", () => {
+    expect(describeVerdictPlainly(withTrips(errors), steady)).toEqual([
+      "Too many requests failed: errors went over 1% at 10.3s.",
+      "Your breaker protected Payments API (recovered at 21.4s), but 44k requests failed fast while it was open. Add capacity to Payments API so it doesn't trip.",
+    ]);
+  });
+
+  it("says when the breaker was still open at the end", () => {
+    const lines = describeVerdictPlainly(
+      withTrips(errors, [{ ...trip, recoveredAtSec: null }]),
+      steady,
+    );
+    expect(lines).toContain(
+      "Your breaker protected Payments API, but it was still open when the run ended: 44k requests failed fast. Add capacity to Payments API so it doesn't trip.",
+    );
+    expect(lines).not.toContain(PLAIN_CAPACITY_TIP);
   });
 });

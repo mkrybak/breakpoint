@@ -2,6 +2,8 @@
 
 import { CircleCheck, CircleX } from "lucide-react";
 import {
+  breakerTripsBehindErrors,
+  describeBreakerTrip,
   describeRunStatus,
   describeVerdictPlainly,
   type RunTone,
@@ -84,6 +86,7 @@ export function Verdict({
   }
 
   const verdict = result?.verdict ?? null;
+  const trips = verdict ? breakerTripsBehindErrors(verdict) : [];
 
   return (
     <div
@@ -103,6 +106,19 @@ export function Verdict({
             <li key={`${f.criterion}-${i}`} className="text-xs">
               <span className="font-mono text-red-300">{f.criterion}</span>{" "}
               <span className="text-neutral-400">@ {f.atSec}s</span> — {f.detail}
+            </li>
+          ))}
+        </ul>
+      )}
+      {trips.length > 0 && (
+        <ul className="mt-1.5 space-y-0.5">
+          {trips.map((t) => (
+            <li key={t.edgeId} className="text-xs">
+              <span className="font-mono text-amber-300">breaker</span>{" "}
+              <span className="text-neutral-400">
+                {t.sourceLabel} → {t.targetLabel}
+              </span>{" "}
+              — {describeBreakerTrip(t)}
             </li>
           ))}
         </ul>

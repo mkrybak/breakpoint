@@ -1,4 +1,5 @@
 import type {
+  BreakerTrip,
   ComponentDef,
   ComponentKind,
   DesignGraph,
@@ -303,6 +304,40 @@ export const asyncLossAdvisor: Advisor = ({ frames }) => {
   ];
 };
 
+/** Breakers on the client's sync path that failed calls fast (T-12.1), most failed-fast first. */
+export function collectBreakerTrips(
+  graph: DesignGraph,
+  frames: SimFrame[],
+): BreakerTrip[] {
+  if (frames.length === 0) return [];
+  const reached = syncReachability(graph);
+  const labelById = new Map(graph.nodes.map((n) => [n.id, n.label]));
+  const trips: BreakerTrip[] = [];
+  for (const edge of graph.edges) {
+    if (!reached.has(edge.source)) continue;
+    let failedRps = 0;
+    for (const f of frames) failedRps += f.perEdge[edge.id]?.failedFastRps ?? 0;
+    const failedFast = failedRps / TICKS_PER_SEC;
+    if (failedFast < 1) continue;
+    const phase = (i: number) => frames[i].perEdge[edge.id]?.breaker;
+    let recoveredAtSec: number | null = null;
+    if (phase(frames.length - 1) === "closed") {
+      let k = frames.length - 1;
+      while (k > 0 && phase(k - 1) === "closed") k--;
+      recoveredAtSec = frames[k].t;
+    }
+    trips.push({
+      edgeId: edge.id,
+      sourceLabel: labelById.get(edge.source) ?? edge.source,
+      targetId: edge.target,
+      targetLabel: labelById.get(edge.target) ?? edge.target,
+      failedFast,
+      recoveredAtSec,
+    });
+  }
+  return trips.sort((a, b) => b.failedFast - a.failedFast);
+}
+
 /** Extension point (05-engines): new verdict check = push a Criterion here. */
 export const criteria: Criterion[] = [
   p95Criterion,
@@ -331,9 +366,11 @@ export function evaluateVerdict(
 ): Verdict {
   const input: VerdictInput = { graph, scenario, frames };
   const failures = criteria.flatMap((criterion) => criterion(input));
+  const trips = collectBreakerTrips(graph, frames);
   return {
     passed: failures.length === 0,
     failures,
     advisories: advisors.flatMap((advisor) => advisor(input)),
+    ...(trips.length > 0 ? { breakerTrips: trips } : {}),
   };
 }

@@ -16,7 +16,8 @@ Run UI tasks via `/ui` or `/build` (screenshots required).
 ## Tasks
 
 ### T-12.1 — Verdict and hint understand breakers
-- [ ] T-12.1 done
+- [x] T-12.1 done
+  - Also: new optional `EdgeFrame.failedFastRps` + `Verdict.breakerTrips` (reporting only, no sim numbers change); wording helpers in `hud-format.ts`; one-line `ChallengeCard.tsx` change; `scripts/sim.ts` prints a breaker summary line.
 
 **Files:** `src/components/hud/Verdict.tsx`, `src/components/quick/challenge-nudge.ts`, `src/lib/simulation/verdict.ts` (advisory facts only)
 **Accept:** When a run fails on errors and some of those errors were fail-fast rejections by an open breaker, the verdict says so: which breaker, how many requests it failed fast, and whether its target recovered (e.g. "Your breaker protected Payments API (recovered at 21 s), but 9k requests failed fast while it was open. Add capacity so it doesn't trip."). The challenge nudge stops suggesting a fix the user already made, and points at capacity behind the breaker instead. The verdict facts come from frames; no new engine behaviour.
@@ -66,3 +67,5 @@ Run UI tasks via `/ui` or `/build` (screenshots required).
 ## Decisions
 
 - (log deviations here)
+- 2026-11-07 (T-12.1): one optional frame field was needed — `EdgeFrame.failedFastRps` (reporting only) — because frames couldn't separate a breaker's fail-fast rejections from the source's own drops; touches `engine.ts` and `core/sim-result.ts` beyond the Files list. The facts are a structured `Verdict.breakerTrips?` rather than advisory strings (the full Verdict shows advisories only on a pass, the plain variant drops them, and the nudge needs the target label). Gating is in the shell (`breakerTripsBehindErrors`): breaker lines show only on a failed run with an `error-rate`/`kill-survival` failure, and in the plain verdict they replace the generic capacity tip. Copy helpers live in `hud-format.ts`; the hint swap lands in `challenge-nudge.ts` + one expression in `ChallengeCard.tsx`. Grader report unchanged.
+- 2026-11-07 (T-12.1, lead call): breaker facts are a structured `Verdict.breakerTrips` field built from frames (not log text, since T-12.2 may delay log lines). "Recovered at" = start of the final unbroken closed stretch. Only breakers on the client's sync path count. When a breaker line shows, Quick's generic capacity tip is dropped.

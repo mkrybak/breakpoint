@@ -61,6 +61,8 @@ export function ChallengeCard() {
     result,
     runScenario,
   });
+  const retryHint =
+    view.kind === "retry" ? (view.breakerHint ?? view.challenge.hint) : undefined;
   const busy = status === "running" || status === "paused";
   const pick = (id: string) => {
     const scenario = getQuickScenario(id);
@@ -152,9 +154,9 @@ export function ChallengeCard() {
                 Not yet
               </p>
               <p className={GOAL}>{view.challenge.goal}</p>
-              {view.challenge.hint && (
+              {retryHint && (
                 <p className="mt-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-2.5 py-1.5 text-xs text-amber-200">
-                  {view.challenge.hint}
+                  {retryHint}
                 </p>
               )}
               <p className={MUTED}>Change the design, then Re-run.</p>

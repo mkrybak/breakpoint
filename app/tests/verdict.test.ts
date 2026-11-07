@@ -6,10 +6,12 @@ import type {
   Scenario,
   SimFrame,
 } from "../src/lib/core";
-import { simulate } from "../src/lib/simulation/engine";
+import { DEFAULT_BREAKER } from "../src/lib/simulation/breaker";
+import { simulate, type ApplyRulesFn } from "../src/lib/simulation/engine";
 import { compileRules } from "../src/lib/simulation/rules";
 import {
   asyncLossAdvisor,
+  collectBreakerTrips,
   consistencyCriterion,
   errorRateCriterion,
   evaluateVerdict,
@@ -32,7 +34,9 @@ function node(
 function edge(
   source: string,
   target: string,
-  overrides: Partial<Pick<DesignEdge, "trafficShare" | "callsPerRequest" | "kind">> = {},
+  overrides: Partial<
+    Pick<DesignEdge, "trafficShare" | "callsPerRequest" | "kind" | "breaker">
+  > = {},
 ): DesignEdge {
   return { id: `e-${source}-${target}`, source, target, kind: "sync", ...overrides };
 }
@@ -532,5 +536,76 @@ describe("evaluateVerdict", () => {
       ],
       advisories: [],
     });
+  });
+});
+
+describe("breaker trips (T-12.1)", () => {
+  // the T-8.6 golden: dep dies for ticks 10–79, breaker on app → dep
+  const g = graph(
+    [node("c", "client"), node("app"), node("dep")],
+    [edge("c", "app"), edge("app", "dep", { breaker: DEFAULT_BREAKER })],
+  );
+  const outage: ApplyRulesFn = (t, s) => ({
+    offeredRps: s.baseRps,
+    ...(t >= 10 && t < 80 ? { aliveFraction: { dep: 0 } } : {}),
+  });
+  const run = (durationSec: number, design: DesignGraph = g) => {
+    const sc = scenario({ durationSec, baseRps: 1000, readRatio: 1 });
+    return { sc, frames: simulate(design, sc, outage) };
+  };
+
+  it("counts failed-fast calls and the final close", () => {
+    const { frames } = run(13);
+    const trips = collectBreakerTrips(g, frames);
+    expect(trips).toHaveLength(1);
+    // (100 open ticks × 1000 + 2 half-open × 900) ÷ 10
+    expect(trips[0].failedFast).toBeCloseTo(10180);
+    expect(trips[0]).toEqual({
+      edgeId: "e-app-dep",
+      sourceLabel: "app",
+      targetId: "dep",
+      targetLabel: "dep",
+      failedFast: trips[0].failedFast,
+      recoveredAtSec: 11.7,
+    });
+  });
+
+  it("a breaker still open at the end has recoveredAtSec null", () => {
+    const { frames } = run(8);
+    const [trip] = collectBreakerTrips(g, frames);
+    expect(trip.recoveredAtSec).toBeNull();
+    expect(trip.failedFast).toBeCloseTo(6490);
+  });
+
+  it("evaluateVerdict carries breakerTrips only when non-empty", () => {
+    const { sc, frames } = run(13);
+    expect(evaluateVerdict(g, sc, frames).breakerTrips).toHaveLength(1);
+    const healthy = graph(
+      [node("c", "client"), node("a", "app_server", { replicas: 2 })],
+      [edge("c", "a")],
+    );
+    const hs = scenario();
+    const verdict = evaluateVerdict(
+      healthy,
+      hs,
+      simulate(healthy, hs, compileRules(healthy, hs)),
+    );
+    expect("breakerTrips" in verdict).toBe(false);
+  });
+
+  it("ignores breakers off the client's sync path (behind a queue)", () => {
+    const behindQueue = graph(
+      [node("c", "client"), node("q", "queue"), node("w", "worker"), node("dep")],
+      [
+        edge("c", "q", { kind: "async" }),
+        edge("q", "w"),
+        edge("w", "dep", { breaker: DEFAULT_BREAKER }),
+      ],
+    );
+    const { frames } = run(13, behindQueue);
+    expect(
+      frames.some((f) => (f.perEdge["e-w-dep"].failedFastRps ?? 0) > 0),
+    ).toBe(true);
+    expect(collectBreakerTrips(behindQueue, frames)).toEqual([]);
   });
 });

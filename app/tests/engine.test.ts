@@ -1018,6 +1018,7 @@ describe("propagateTraffic — breaker gate (T-8.6)", () => {
     expect(prop.freshPerEdge["e-c-app"]).toEqual({ read: 100, write: 0 });
     expect(prop.unroutable.c).toEqual({ read: 900, write: 0 });
     expect(prop.perNode.app.demand).toEqual({ read: 100, write: 0 });
+    expect(prop.failedFastPerEdge["e-c-app"]).toBe(900);
   });
 
   it("pass 0 sends nothing to the target", () => {
@@ -1026,6 +1027,7 @@ describe("propagateTraffic — breaker gate (T-8.6)", () => {
     });
     expect(prop.perEdge["e-c-app"]).toEqual({ read: 0, write: 0 });
     expect(prop.unroutable.c).toEqual({ read: 1000, write: 0 });
+    expect(prop.failedFastPerEdge["e-c-app"]).toBe(1000);
   });
 });
 
@@ -1075,6 +1077,13 @@ describe("simulate — golden: circuit breaker (T-8.6)", () => {
     expect(frames[40].errorRate).toBe(1);
     expect(frames[116].errorRate).toBe(0.9);
     for (const f of frames.slice(117)) expect(f.errorRate).toBe(0);
+    // T-12.1: the rejected share is reported on the edge, only while gated
+    const ff = (i: number) => frames[i].perEdge["e-app-dep"].failedFastRps;
+    expect(ff(40)).toBe(1000);
+    expect(ff(65)).toBe(900);
+    expect(ff(116)).toBe(900);
+    expect("failedFastRps" in frames[13].perEdge["e-app-dep"]).toBe(false);
+    expect("failedFastRps" in frames[117].perEdge["e-app-dep"]).toBe(false);
   });
 
   it("async edges ignore the breaker", () => {

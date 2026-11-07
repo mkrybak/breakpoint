@@ -1,5 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { DesignGraph, RunResult, Scenario } from "../src/lib/core";
+import type {
+  BreakerTrip,
+  DesignGraph,
+  RunResult,
+  Scenario,
+} from "../src/lib/core";
 import {
   getQuickChallenge,
   getQuickScenario,
@@ -392,6 +397,37 @@ describe("describeNudge", () => {
         runScenario: spike,
       }),
     ).toEqual({ kind: "retry", challenge: QUICK_CHALLENGES[0], stopped: true });
+  });
+
+  it("a failed run where a breaker tripped → the hint points behind the breaker", () => {
+    const trip: BreakerTrip = {
+      edgeId: "e-app-dep",
+      sourceLabel: "App fleet",
+      targetId: "dep",
+      targetLabel: "Dependency",
+      failedFast: 43986,
+      recoveredAtSec: 21.4,
+    };
+    const result: RunResult = {
+      ...fakeResult(spike, false),
+      verdict: {
+        passed: false,
+        failures: [{ criterion: "error-rate", atSec: 10.3, detail: "x" }],
+        advisories: [],
+        breakerTrips: [trip],
+      },
+    };
+    const view = describeNudge({
+      ...base,
+      scenarioId: "quick-spike-3x",
+      status: "done",
+      result,
+      runScenario: spike,
+    });
+    expect(view).toMatchObject({ kind: "retry", stopped: false });
+    expect(view.kind === "retry" && view.breakerHint).toBe(
+      "Your breaker on App fleet → Dependency kept tripping because Dependency can't take the load. Select Dependency and add replicas.",
+    );
   });
 
   it("a stale result for another scenario shows the selected challenge as active", () => {

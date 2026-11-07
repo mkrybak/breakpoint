@@ -77,4 +77,9 @@ for (const failure of verdict.failures) {
 for (const advisory of verdict.advisories) {
   console.log(`  ~ ${advisory}`);
 }
+for (const trip of verdict.breakerTrips ?? []) {
+  console.log(
+    `  ⛨ breaker ${trip.sourceLabel} → ${trip.targetLabel}: ${Math.round(trip.failedFast)} requests failed fast, ${trip.recoveredAtSec === null ? "still open at the end" : `closed for good from t=${trip.recoveredAtSec}s`}`,
+  );
+}
 process.exit(verdict.passed ? 0 : 1);

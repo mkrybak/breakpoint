@@ -1,4 +1,5 @@
-import type { RunResult, Scenario } from "@/lib/core";
+import { breakerTripsBehindErrors } from "@/components/hud/hud-format";
+import type { BreakerTrip, RunResult, Scenario } from "@/lib/core";
 import type { QuickChallenge } from "@/lib/scenarios";
 import { TICKS_PER_SEC } from "@/lib/simulation";
 import type { SimStatus } from "@/stores/sim-store";
@@ -39,7 +40,13 @@ export type NudgeView =
   | { kind: "none" }
   | { kind: "active"; challenge: QuickChallenge; running: boolean }
   | { kind: "solved"; challenge: QuickChallenge; next: QuickChallenge | null }
-  | { kind: "retry"; challenge: QuickChallenge; stopped: boolean }
+  | {
+      kind: "retry";
+      challenge: QuickChallenge;
+      stopped: boolean;
+      /** replaces challenge.hint when a breaker tripped (T-12.1) */
+      breakerHint?: string;
+    }
   | {
       kind: "suggest";
       next: QuickChallenge;
@@ -47,6 +54,11 @@ export type NudgeView =
       passed: boolean;
     }
   | { kind: "all-done" };
+
+/** The "Not yet" hint when a breaker failed requests fast: capacity behind it, not the static hint. */
+export function describeBreakerHint(trip: BreakerTrip): string {
+  return `Your breaker on ${trip.sourceLabel} → ${trip.targetLabel} kept tripping because ${trip.targetLabel} can't take the load. Select ${trip.targetLabel} and add replicas.`;
+}
 
 export interface NudgeInput {
   challenges: readonly QuickChallenge[];
@@ -83,10 +95,12 @@ export function describeNudge(input: NudgeInput): NudgeView {
         next: nextUnsolvedChallenge(challenges, solved, selected.scenarioId),
       };
     }
+    const trip = breakerTripsBehindErrors(result.verdict)[0];
     return {
       kind: "retry",
       challenge: selected,
       stopped: !ranFullLength(result, runScenario),
+      ...(trip ? { breakerHint: describeBreakerHint(trip) } : {}),
     };
   }
   const next = nextUnsolvedChallenge(challenges, solved);

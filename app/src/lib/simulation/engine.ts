@@ -219,6 +219,8 @@ export interface PropagationResult {
   freshPerEdge: Record<string, Flow>;
   /** flow a dead (partitioned) edge stranded at its source, per node id */
   unroutable: Record<string, Flow>;
+  /** edge id → RPS a breaker gate rejected at the source this tick; only gated (edgePass < 1) live edges */
+  failedFastPerEdge: Record<string, number>;
 }
 
 /**
@@ -267,7 +269,8 @@ export function edgeMultiplier(edge: DesignEdge, sourceKind: ComponentKind): num
  * Flow aimed at a dead (partitioned) edge is booked in `unroutable` at the
  * source — the tick loop counts it as dropped there. A breaker's `edgePass`
  * admits only that fraction; the rest books in `unroutable` at the source
- * (fails fast as a caller error, like a partition).
+ * (fails fast as a caller error, like a partition), and is also reported
+ * per edge in `failedFastPerEdge`.
  */
 export function propagateTraffic(
   graph: DesignGraph,
@@ -284,12 +287,13 @@ export function propagateTraffic(
   }
   const perEdge: Record<string, Flow> = {};
   const freshPerEdge: Record<string, Flow> = {};
+  const failedFastPerEdge: Record<string, number> = {};
   for (const e of graph.edges) {
     perEdge[e.id] = zeroFlow();
     freshPerEdge[e.id] = zeroFlow();
   }
   if (order.length === 0) {
-    return { order, perNode, perEdge, freshPerEdge, unroutable };
+    return { order, perNode, perEdge, freshPerEdge, unroutable, failedFastPerEdge };
   }
   const dead = new Set(overrides.deadEdges ?? []);
 
@@ -327,6 +331,7 @@ export function propagateTraffic(
           read: flow.read - admitted.read,
           write: flow.write - admitted.write,
         });
+        failedFastPerEdge[edge.id] = flowRps(flow) - flowRps(admitted);
         flow = admitted;
         // latency weights come from fresh flow: an open edge charges 0 ms
         fresh = scaleFlow(fresh, pass);
@@ -341,7 +346,7 @@ export function propagateTraffic(
       }
     }
   }
-  return { order, perNode, perEdge, freshPerEdge, unroutable };
+  return { order, perNode, perEdge, freshPerEdge, unroutable, failedFastPerEdge };
 }
 
 /**
@@ -825,10 +830,12 @@ export function createSimRun(
         const rps = flowRps(prop.perEdge[edge.id]);
         const step = edgeTicks.get(edge.id);
         const phase = tickPhase.get(edge.id);
+        const failedFast = prop.failedFastPerEdge[edge.id] ?? 0;
         perEdge[edge.id] = {
           rps,
           ...(step ? { retryRps: step.retryRps, failRate: step.failRate } : {}),
           ...(phase !== undefined ? { breaker: phase } : {}),
+          ...(failedFast > 0 ? { failedFastRps: failedFast } : {}),
         };
       }
 

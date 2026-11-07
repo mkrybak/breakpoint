@@ -1,4 +1,5 @@
 import type {
+  BreakerTrip,
   DesignGraph,
   RunResult,
   Scenario,
@@ -125,10 +126,34 @@ const PLAIN_FAILURE: Record<
 export const PLAIN_CAPACITY_TIP =
   "Look at the canvas: red nodes ran out of capacity, grey ones went down. Select a node to change its settings.";
 
+/** Request count → "950", "9k", "12.3k" (k-suffix at/above 1000, no trailing ".0"). */
+export function formatCount(n: number): string {
+  return n >= 1000 ? `${Number((n / 1000).toFixed(1))}k` : `${Math.round(n)}`;
+}
+
+const ERROR_CRITERIA = new Set(["error-rate", "kill-survival"]);
+
+/** Breaker trips worth explaining: the run failed on errors and a breaker failed calls fast. */
+export function breakerTripsBehindErrors(verdict: Verdict): BreakerTrip[] {
+  if (verdict.passed) return [];
+  if (!verdict.failures.some((f) => ERROR_CRITERIA.has(f.criterion))) return [];
+  return Array.isArray(verdict.breakerTrips) ? verdict.breakerTrips : [];
+}
+
+/** One sentence crediting the breaker and naming the remaining fix. */
+export function describeBreakerTrip(trip: BreakerTrip): string {
+  const n = formatCount(trip.failedFast);
+  const fix = `Add capacity to ${trip.targetLabel} so it doesn't trip.`;
+  return trip.recoveredAtSec === null
+    ? `Your breaker protected ${trip.targetLabel}, but it was still open when the run ended: ${n} requests failed fast. ${fix}`
+    : `Your breaker protected ${trip.targetLabel} (recovered at ${formatSec(trip.recoveredAtSec)}), but ${n} requests failed fast while it was open. ${fix}`;
+}
+
 /**
  * Quick mode's plain-language verdict lines (the headline stays describeRunStatus's
  * "Passed"/"Failed"). Unknown criteria fall back to the engine's detail string.
- * Advisories are omitted: they're grader hints.
+ * Advisories are omitted: they're grader hints. A failure on errors with
+ * breaker trips adds one line per trip, which replaces the capacity tip.
  */
 export function describeVerdictPlainly(
   verdict: Verdict,
@@ -149,7 +174,12 @@ export function describeVerdictPlainly(
   const lines = verdict.failures.map(
     (f) => PLAIN_FAILURE[f.criterion]?.(f, scenario) ?? f.detail,
   );
-  if (verdict.failures.some((f) => f.criterion !== "consistency")) {
+  const breakerLines = breakerTripsBehindErrors(verdict).map(describeBreakerTrip);
+  lines.push(...breakerLines);
+  if (
+    breakerLines.length === 0 &&
+    verdict.failures.some((f) => f.criterion !== "consistency")
+  ) {
     lines.push(PLAIN_CAPACITY_TIP);
   }
   return [...new Set(lines)];
