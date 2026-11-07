@@ -43,6 +43,7 @@ The design is not a drawing — it's a typed graph (React Flow JSON). That makes
 - [x] [[tasks/M6-post-mvp-features\|M6 — Post-MVP features]] ✅ 2026-07-19 (T-6.1 auto-balancing LB)
 - [x] [[tasks/M7-quick-mode\|M7 — Quick mode]] ✅ 2026-11-05
 - [ ] [[tasks/M8-trustworthy-simulation\|M8 — Trustworthy simulation]] ← next
+- [ ] [[tasks/M12-sim-feedback-ux\|M12 — Sim feedback UX]] (after M8)
 - [ ] [[tasks/M9-components-and-cost\|M9 — More components + cost]]
 - [ ] [[tasks/M10-practice-depth\|M10 — Practice depth]]
 - [ ] [[tasks/M11-live-interview-mode\|M11 — Live Interview mode]]

@@ -11,6 +11,7 @@ Ordered. Work top to bottom; housekeeping ([[tasks/MH-housekeeping|MH]]) slots i
 |---|---|---|---|
 | M7 | [[tasks/M7-quick-mode\|Quick mode]] | New front door: one click to a running sim. Splits product into Quick / Practice / Interview | 7 |
 | M8 | [[tasks/M8-trustworthy-simulation\|Trustworthy simulation]] | Queues that buffer, split vs fan-out, retries/timeouts/breakers, honest tail latency | 7 |
+| M12 | [[tasks/M12-sim-feedback-ux\|Sim feedback UX]] | M8's breakers/retries/p95 work but can read as broken: verdict + log around breakers, retry storm on canvas, p95 breakdown, replay HUD, sidebar only when needed | 8 |
 | M9 | [[tasks/M9-components-and-cost\|More components + cost]] | WebSocket gateway, regions + geo-replication, sourced numbers, cost model + overlay | 7 |
 | M10 | [[tasks/M10-practice-depth\|Practice depth]] | Problem bank with hidden events + par cost, self-review, share by link | 4 |
 | M11 | [[tasks/M11-live-interview-mode\|Live Interview mode]] | Interviewer + candidate in one live session; first server-side piece | 6 |

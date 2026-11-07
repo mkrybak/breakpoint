@@ -1,0 +1,68 @@
+---
+tags: [milestone]
+status: planning
+milestone: M12
+depends-on: M8
+---
+
+# M12 — Sim feedback UX
+
+**Goal:** Make what the sim does with M8's features (breakers, retries, honest p95) readable. Today they work but can look broken: a breaker that saved the dependency still shows a bare "Failed", the log says "recovered" while the breaker hides the node, and a retry storm is invisible on the canvas. Source: lead review after `/build T-8.4..T-8.7` (2026-11-07).
+
+**Demo:** Run "3× traffic spike" on `examples/retry-storm.json` with retries 3 and no breaker. The edge chip shows the amplification (`↻ 3.4× load`). Tick the breaker and re-run. The log reads "idle (breaker open)" rather than "recovered", the verdict credits the breaker and names the remaining fix, and clicking p95 shows which node drives the tail. Scrub the replay into the open window and the HUD shows that moment's numbers.
+
+Run UI tasks via `/ui` or `/build` (screenshots required).
+
+## Tasks
+
+### T-12.1 — Verdict and hint understand breakers
+- [ ] T-12.1 done
+
+**Files:** `src/components/hud/Verdict.tsx`, `src/components/quick/challenge-nudge.ts`, `src/lib/simulation/verdict.ts` (advisory facts only)
+**Accept:** When a run fails on errors and some of those errors were fail-fast rejections by an open breaker, the verdict says so: which breaker, how many requests it failed fast, and whether its target recovered (e.g. "Your breaker protected Payments API (recovered at 21 s), but 9k requests failed fast while it was open. Add capacity so it doesn't trip."). The challenge nudge stops suggesting a fix the user already made, and points at capacity behind the breaker instead. The verdict facts come from frames; no new engine behaviour.
+
+### T-12.2 — Event log tells the truth around breakers
+- [ ] T-12.2 done
+
+**Files:** `src/lib/simulation/node-models.ts` (`transitionMessage`), `src/lib/simulation/engine.ts` (event order), `src/components/hud/hud-format.ts` (`classifyLogSeverity`), `tests/engine.test.ts`
+**Accept:** A node whose load drops because an upstream breaker opened logs "X idle (breaker open)" (neutral), not a green "X recovered". "Recovered" is logged only when the node serves real traffic again. A breaker that re-opens within 1 s of closing logs one line ("breaker re-opened 0.5 s after closing") instead of a closed/overloaded/open burst. Update the T-8.6 golden event timeline, and record old → new lines in Decisions.
+
+### T-12.3 — Resilience visible on the canvas
+- [ ] T-12.3 done
+
+**Files:** `src/components/canvas/edges/FlowEdge.tsx`, `src/stores/flow-adapter.ts`
+**Accept:** The idle edge chip shows the edge's settings compactly (`⏱200 ↻3`, plus the existing breaker suffix). While running, an edge with retries shows its amplification (attempts ÷ fresh calls, e.g. `↻ 3.4× load`, amber above 1.5×) from `perEdge.retryRps`/`rps`. It's readable without selecting the edge, and replay scrubbing updates it.
+
+### T-12.4 — Short edges stay readable
+- [ ] T-12.4 done
+
+**Files:** `src/components/canvas/edges/FlowEdge.tsx`
+**Accept:** On an edge too short for its label, the open popover sits beside the edge rather than covering the target node's label, and the chip collapses to an icon so the edge stroke (including the rose "breaker open" stroke) stays visible. Screenshots: the seeded `retry-storm.json` layout, with no node dragging.
+
+### T-12.5 — p95 explains itself
+- [ ] T-12.5 done
+
+**Files:** `src/components/hud/MetricsBar.tsx`, `src/lib/simulation/engine.ts` (per-node tail contribution on the frame, optional field), `src/lib/core/sim-result.ts`
+**Accept:** Clicking the p95 card opens a small popover (works on touch, replaces reliance on the native `title`) with the one-line explanation and the top 3 nodes by contribution to the tail, from T-8.7's moment fold. The first time a user who has saved designs sees the new p95 model, a one-time dismissible note says p95 is now more realistic: tails grow faster as components get busy. Errors and Lag cards get the same dotted-underline hint affordance as p95.
+
+### T-12.6 — Replay HUD follows the scrubber
+- [ ] T-12.6 done
+
+**Files:** `src/components/hud/MetricsBar.tsx`, `src/components/hud/ReplayScrubber.tsx`, `src/stores/sim-store.ts`
+**Accept:** While scrubbing a finished run, the HUD cards show the scrubbed frame's values (p95, errors, served, lag, bottleneck), matching the canvas. Releasing to the end shows the end-of-run values. "peak" subs keep showing the whole-run peak.
+
+### T-12.7 — Small polish
+- [ ] T-12.7 done
+
+**Files:** `src/components/panels/styles.ts`, `src/stores/phase-store.ts`, `src/components/panels/PhaseBar.tsx`
+**Accept:** Panel inputs (`INPUT`) get a visible focus ring and a 32px min height. The Practice phase survives a reload: the canvas isn't re-locked behind "High-level design" after a refresh.
+
+### T-12.8 — Right sidebar only when it's needed
+- [ ] T-12.8 done
+
+**Files:** `src/components/panels/NodeConfigPanel.tsx`, `src/components/layout/PracticeWorkspace.tsx`, `src/components/quick/QuickWorkspace.tsx`, `src/components/quick/QuickMenus.tsx` (or a shared top-bar menu)
+**Accept:** The right inspector column (Design / Node / Edge) isn't a permanent ~250px strip. With nothing selected it is hidden (or collapsed to a thin rail), and the canvas gets the width. Selecting a node or edge opens it; deselecting closes it. Export JSON / Import JSON move out of the sidebar into a top-bar menu (a "⋯" / File menu) in both Quick and Practice; import still accepts a dropped file. The open/close doesn't jump the canvas viewport. Screenshots at 1440×900 and 1280×800, before and after, for both modes. Source: user feedback 2026-11-07 ("right sidebar takes a lot of space, export/import isn't always needed").
+
+## Decisions
+
+- (log deviations here)
