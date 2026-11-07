@@ -69,6 +69,10 @@ function parsePass(v: unknown): Scenario["pass"] | null {
     if (!num(v.minSurvivedKills)) return null;
     pass.minSurvivedKills = v.minSurvivedKills;
   }
+  if (v.maxLagSec !== undefined) {
+    if (!num(v.maxLagSec)) return null;
+    pass.maxLagSec = v.maxLagSec;
+  }
   return pass;
 }
 

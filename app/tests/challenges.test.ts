@@ -96,6 +96,8 @@ function fakeResult(
       p95Ms: 0,
       errorRate: 0,
       servedRps: 0,
+      asyncDroppedRps: 0,
+      maxLagSec: 0,
       events: [],
     })),
     verdict: { passed, failures: [], advisories: [] },

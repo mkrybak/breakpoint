@@ -101,6 +101,14 @@ describe("parseScenario", () => {
     ).toBeNull();
   });
 
+  it("round-trips an optional maxLagSec and rejects a non-number", () => {
+    const withLag = { ...valid, pass: { ...valid.pass, maxLagSec: 30 } };
+    expect(parseScenario(structuredClone(withLag))).toEqual(withLag);
+    expect(
+      parseScenario({ ...valid, pass: { ...valid.pass, maxLagSec: "x" } }),
+    ).toBeNull();
+  });
+
   it("rejects non-objects", () => {
     expect(parseScenario(null)).toBeNull();
     expect(parseScenario("scenario")).toBeNull();

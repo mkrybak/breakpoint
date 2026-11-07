@@ -3,6 +3,7 @@
 import { Handle, Position, type NodeProps } from "@xyflow/react";
 import { ComponentIcon } from "@/components/icons";
 import { STATE_COLOR, formatCount } from "@/components/canvas/sim-visuals";
+import { formatLag } from "@/components/hud/hud-format";
 import { getComponentDef } from "@/lib/registry";
 import { useSimStore } from "@/stores/sim-store";
 import type { ComponentFlowNode } from "@/stores/flow-adapter";
@@ -16,6 +17,14 @@ export function ComponentNode({ id, data, selected }: NodeProps<ComponentFlowNod
   const isOverloaded = state === "overloaded";
   const utilPct = Math.round(Math.min(Math.max(live?.util ?? 0, 0), 1) * 100);
   const barColor = live ? STATE_COLOR[state] : def.color;
+  // async nodes report backlog in messages; others carry it in RPS units
+  const backlog = live?.queueDepth ?? (live ? live.queued : 0);
+  const isAsync = def.category === "async";
+  // a buffering queue is doing its job — amber, not an error, until overloaded
+  const badgeClass =
+    isAsync && !isOverloaded
+      ? "bg-amber-500 text-neutral-950"
+      : "bg-red-500 text-white";
 
   const borderClass = selected
     ? "border-sky-400"
@@ -36,9 +45,16 @@ export function ComponentNode({ id, data, selected }: NodeProps<ComponentFlowNod
           : undefined
       }
     >
-      {live && live.queued > 0 && (
-        <span className="absolute -top-2 -right-2 rounded-full bg-red-500 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-white shadow">
-          {formatCount(live.queued)}
+      {live && Math.round(backlog) > 0 && (
+        <span
+          className={`absolute -top-2 -right-2 rounded-full px-1.5 py-0.5 font-mono text-[10px] font-semibold shadow ${badgeClass}`}
+          title={
+            isAsync
+              ? `${formatCount(Math.round(backlog))} messages waiting · lag ${formatLag(live.lagSec ?? 0)}`
+              : undefined
+          }
+        >
+          {formatCount(Math.round(backlog))}
         </span>
       )}
       <Handle type="target" position={Position.Left} />

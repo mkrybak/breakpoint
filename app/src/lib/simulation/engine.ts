@@ -283,6 +283,50 @@ export function propagateTraffic(
   return { order, perNode, perEdge, unroutable };
 }
 
+/**
+ * Fraction of each node's traffic this tick that is on the client (sync)
+ * path (T-8.2). Entry = 1; async-category nodes = 0 (work they accepted is
+ * off the client path, and so is everything downstream of them); others =
+ * client-carried in-edge flow / total in-edge flow, where only sync edges
+ * carry the source's share. Zero-inflow nodes keep `prev` (initially 0):
+ * their remaining backlog came from earlier ticks. Every graph node gets
+ * an entry.
+ */
+export function clientShares(
+  graph: DesignGraph,
+  prop: PropagationResult,
+  prev: ReadonlyMap<string, number>,
+): Map<string, number> {
+  const share = new Map<string, number>();
+  const nodeById = new Map(graph.nodes.map((n) => [n.id, n]));
+  const inflow = new Map<string, { total: number; client: number }>();
+  for (const id of prop.order) {
+    const node = nodeById.get(id);
+    if (!node) continue;
+    let s: number;
+    if (getComponentDef(node.kind).category === "async") s = 0;
+    else if (id === graph.entryNodeId) s = 1;
+    else {
+      const acc = inflow.get(id);
+      s = acc && acc.total > 0 ? acc.client / acc.total : (prev.get(id) ?? 0);
+    }
+    share.set(id, s);
+    for (const edge of graph.edges) {
+      if (edge.source !== id) continue;
+      const rps = flowRps(prop.perEdge[edge.id]);
+      if (rps === 0) continue;
+      const acc = inflow.get(edge.target) ?? { total: 0, client: 0 };
+      acc.total += rps;
+      if (edge.kind === "sync") acc.client += rps * s;
+      inflow.set(edge.target, acc);
+    }
+  }
+  for (const n of graph.nodes) {
+    if (!share.has(n.id)) share.set(n.id, prev.get(n.id) ?? 0);
+  }
+  return share;
+}
+
 /** Simulation clock: 10 ticks/s (dt = 100 ms). */
 export const TICKS_PER_SEC = 10;
 
@@ -323,7 +367,10 @@ const steadyBaseLoad: ApplyRulesFn = (_tickIndex, scenario) => ({
  * weight = edge flow / the node's served total, so a cache shortens the path
  * by exactly the traffic it absorbs. Async edges are off the client path
  * (queues absorb bursts; their delay shows as the queue's lagSec, not p95).
- * Back/self edges are skipped with the same rule propagation uses.
+ * Edges leaving an async node are off the client path too, whatever their
+ * kind: consumers pull, so the client never waits on them — a queue's own
+ * path latency is its enqueue cost (T-8.2). Back/self edges are skipped with
+ * the same rule propagation uses.
  */
 function meanPathMs(
   graph: DesignGraph,
@@ -331,6 +378,11 @@ function meanPathMs(
   outputs: Map<string, NodeModelOutput>,
 ): number {
   const position = new Map(prop.order.map((id, i) => [id, i]));
+  const asyncIds = new Set(
+    graph.nodes
+      .filter((n) => getComponentDef(n.kind).category === "async")
+      .map((n) => n.id),
+  );
   const pathMs = new Map<string, number>();
   for (let i = prop.order.length - 1; i >= 0; i--) {
     const id = prop.order[i];
@@ -338,6 +390,11 @@ function meanPathMs(
     if (!out) continue;
     const servedTotal = flowRps(out.served);
     let ms = out.latencyMs;
+    // consumers pull from an async node: nothing past it is client latency
+    if (asyncIds.has(id)) {
+      pathMs.set(id, ms);
+      continue;
+    }
     for (const edge of graph.edges) {
       if (edge.source !== id || edge.kind === "async") continue;
       const to = position.get(edge.target);
@@ -382,6 +439,7 @@ export function createSimRun(
     graph.nodes.map((n) => [n.id, "ok"]),
   );
   const prevLag = new Map<string, number>();
+  const clientSharePrev = new Map<string, number>();
   const nodeById = new Map(graph.nodes.map((n) => [n.id, n]));
   const position = new Map(topoSort(graph).map((id, i) => [id, i]));
   /** async node id → its forward outbound edges (the consumers that pull) */
@@ -455,17 +513,25 @@ export function createSimRun(
         (node, def, inflow) => evaluate(node, def, inflow).served,
         { hitRate: effects.hitRate, deadEdges: effects.deadEdges },
       );
+      const shares = clientShares(graph, prop, clientSharePrev);
 
       const perNode: SimFrame["perNode"] = {};
       const events: string[] = [];
-      let totalDropped = 0;
+      let clientDropped = 0;
+      let asyncDropped = 0;
+      let maxLagSec = 0;
       for (const node of graph.nodes) {
         // nodes propagation never reached still tick, so backlogs drain/drop
         const out =
           outputs.get(node.id) ??
           evaluate(node, getComponentDef(node.kind), zeroFlow());
         const lost = flowRps(prop.unroutable[node.id]);
-        totalDropped += out.dropped + lost;
+        const nodeDropped = out.dropped + lost;
+        const share = shares.get(node.id) ?? 0;
+        const clientLost = nodeDropped * share;
+        clientDropped += clientLost;
+        asyncDropped += nodeDropped - clientLost;
+        clientSharePrev.set(node.id, share);
         perNode[node.id] = {
           util: out.util,
           queued: flowRps(out.queued),
@@ -483,6 +549,7 @@ export function createSimRun(
           perNode[node.id].queueDepth = depth;
           perNode[node.id].lagSec = lag;
         }
+        maxLagSec = Math.max(maxLagSec, perNode[node.id].lagSec ?? 0);
         queuedPrev.set(node.id, out.queued);
         if (out.state !== prevState.get(node.id)) {
           prevState.set(node.id, out.state);
@@ -504,16 +571,19 @@ export function createSimRun(
         p95Ms: P95_FACTOR * meanPathMs(graph, prop, outputs),
         errorRate:
           effects.offeredRps > 0
-            ? Math.min(1, totalDropped / effects.offeredRps)
-            : totalDropped > 0
+            ? Math.min(1, clientDropped / effects.offeredRps)
+            : clientDropped > 0
               ? 1
               : 0,
-        // accepted-not-dropped; queued work counts until it drops. A graph
-        // with no entry serves nothing, whatever was offered.
+        // client-facing: accepted-not-dropped on the client path; queued
+        // work counts until it drops. A graph with no entry serves nothing,
+        // whatever was offered.
         servedRps:
           prop.order.length === 0
             ? 0
-            : Math.max(0, effects.offeredRps - totalDropped),
+            : Math.max(0, effects.offeredRps - clientDropped),
+        asyncDroppedRps: asyncDropped,
+        maxLagSec,
         events,
       };
     },

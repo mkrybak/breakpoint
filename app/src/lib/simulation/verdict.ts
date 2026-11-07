@@ -267,12 +267,49 @@ export const queueOnSyncPathAdvisor: Advisor = ({ graph }) => {
   return advisories;
 };
 
+/** fail on the first frame whose max consumer lag exceeds pass.maxLagSec */
+export const lagCriterion: Criterion = ({ graph, scenario, frames }) => {
+  const budget = scenario.pass.maxLagSec;
+  if (budget === undefined) return [];
+  for (const f of frames) {
+    if (f.maxLagSec <= budget) continue;
+    let worst = graph.nodes[0]?.label ?? "?";
+    let worstLag = -1;
+    for (const n of graph.nodes) {
+      const lag = f.perNode[n.id]?.lagSec ?? 0;
+      if (lag > worstLag) {
+        worstLag = lag;
+        worst = n.label;
+      }
+    }
+    return [
+      {
+        criterion: "lag",
+        atSec: f.t,
+        detail: `consumer lag ${f.maxLagSec.toFixed(1)}s on "${worst}" over ${budget}s budget at t=${f.t}s`,
+      },
+    ];
+  }
+  return [];
+};
+
+/** work accepted by a queue but never processed — invisible in errorRate */
+export const asyncLossAdvisor: Advisor = ({ frames }) => {
+  const lost =
+    frames.reduce((sum, f) => sum + f.asyncDroppedRps, 0) / TICKS_PER_SEC;
+  if (lost < 1) return [];
+  return [
+    `Async work lost: ${formatRps(lost)} jobs dropped after being queued (backlog overflow or overloaded consumers) — clients saw no errors, but that work never ran`,
+  ];
+};
+
 /** Extension point (05-engines): new verdict check = push a Criterion here. */
 export const criteria: Criterion[] = [
   p95Criterion,
   errorRateCriterion,
   killSurvivalCriterion,
   consistencyCriterion,
+  lagCriterion,
 ];
 
 /** Advisory flags — shown to the grader, never fail the run. */
@@ -280,6 +317,7 @@ export const advisors: Advisor[] = [
   overProvisioningAdvisor,
   prematureShardingAdvisor,
   queueOnSyncPathAdvisor,
+  asyncLossAdvisor,
 ];
 
 /**

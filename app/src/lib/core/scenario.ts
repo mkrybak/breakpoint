@@ -29,6 +29,8 @@ export interface Scenario {
     /** if set, verdict checks read-path consistency */
     consistency?: "strong";
     minSurvivedKills?: number;
+    /** if set, verdict fails when any async node's consumer lag exceeds this (seconds) */
+    maxLagSec?: number;
   };
   /** determinism */
   seed: number;

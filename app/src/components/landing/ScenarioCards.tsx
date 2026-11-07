@@ -26,6 +26,9 @@ export function ScenarioCards() {
               Target: p95 ≤ {s.pass.p95Ms}ms · errors ≤{" "}
               {Math.round(s.pass.maxErrorRate * 100)}%
               {s.pass.consistency === "strong" ? " · strong consistency" : ""}
+              {s.pass.maxLagSec !== undefined
+                ? ` · lag ≤ ${s.pass.maxLagSec}s`
+                : ""}
             </p>
             {s.timeline.length > 0 && (
               <ul className="mt-2 space-y-0.5">

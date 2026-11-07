@@ -17,6 +17,8 @@ interface ScenarioStore {
   updatePass: (patch: { p95Ms?: number; maxErrorRate?: number }) => void;
   /** Toggle the strong-consistency NFR on/off. */
   setStrongConsistency: (on: boolean) => void;
+  /** Set or clear (null) the consumer-lag NFR. */
+  setMaxLagSec: (sec: number | null) => void;
 }
 
 export const useScenarioStore = create<ScenarioStore>((set) => ({
@@ -43,6 +45,14 @@ export const useScenarioStore = create<ScenarioStore>((set) => ({
       const pass = { ...s.scenario.pass };
       if (on) pass.consistency = "strong";
       else delete pass.consistency;
+      return { scenario: { ...s.scenario, pass } };
+    }),
+
+  setMaxLagSec: (sec) =>
+    set((s) => {
+      const pass = { ...s.scenario.pass };
+      if (sec === null) delete pass.maxLagSec;
+      else pass.maxLagSec = sec;
       return { scenario: { ...s.scenario, pass } };
     }),
 }));

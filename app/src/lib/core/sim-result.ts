@@ -21,15 +21,24 @@ export interface SimFrame {
   perNode: Record<string, NodeFrame>;
   perEdge: Record<string, { rps: number }>;
   p95Ms: number;
+  /** client-path drops / offered (0–1); async losses are in asyncDroppedRps */
   errorRate: number;
   servedRps: number;
+  /**
+   * RPS lost off the client path this tick: async-node backlog overflow,
+   * drops at consumers, and the non-client share of shared nodes' drops.
+   * Never part of errorRate.
+   */
+  asyncDroppedRps: number;
+  /** max consumer lag (s) over async nodes this tick; 0 with no async nodes */
+  maxLagSec: number;
   /** log lines emitted this tick */
   events: string[];
 }
 
 /** One broken pass criterion. */
 export interface VerdictFailure {
-  /** which check broke: "p95" | "error-rate" | "kill-survival" | "consistency" */
+  /** which check broke: "p95" | "error-rate" | "kill-survival" | "consistency" | "lag" */
   criterion: string;
   /** seconds into the run; 0 for static checks */
   atSec: number;

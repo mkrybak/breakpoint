@@ -23,7 +23,8 @@ Every task updates [[03-simulation-engine]] (spec + Decisions) and adds or adjus
 **Accept:** Async-category nodes (queue, stream) hold a large backlog: a configurable retention (instead of the 0.5s-of-capacity cap every node gets today, `node-models.ts:181`). Consumers drain it at their own capacity (pull semantics). `SimFrame` carries queue depth and consumer lag (seconds) per async node. Golden test, the review's repro: client → app (5) → queue → workers (2), 1500 RPS, spike ×3 for 3s ⇒ **0% client errors**, backlog grows then drains, lag returns to 0.
 
 ### T-8.2 — Async failures separate from client errors
-- [ ] T-8.2 done
+- [x] T-8.2 done
+  - Also: the client latency fold stops at async nodes (lead review: a queue design read p95 ≈ 660 ms from the worker behind it, now ≈ 21–34 ms); the canvas queue badge shows messages (amber) instead of RPS carry units; the Quick bar gets compact cards when a 4th (Queue lag) card is shown.
 
 **Files:** `src/lib/simulation/engine.ts`, `src/lib/simulation/verdict.ts`, `src/lib/core/scenario.ts`, HUD
 **Accept:** `errorRate` counts only drops on the sync (client) path (today all drops are summed, `engine.ts:422`). Async drops (backlog overflow) are reported separately. New optional NFR `pass.maxLagSec` with a verdict criterion. The HUD shows max consumer lag when the design has async nodes.
@@ -65,3 +66,7 @@ Every task updates [[03-simulation-engine]] (spec + Decisions) and adds or adjus
 - 2026-11-06 (T-8.1, lead call): queue retention is size-based (`retentionMsgs`, default 1M) not time-based — runs last ~60 s, a time retention could never trigger.
 - 2026-11-06 (T-8.1, lead call): a sink queue (no consumer) drains unlimited; a partitioned consumer edge pauses the drain (backlog holds) instead of dropping.
 - 2026-11-06 (T-8.1, lead call): queue latency = enqueue cost only; backlog wait is consumer lag (`lagSec`), not producer p95.
+- 2026-11-06 (T-8.2, lead call): client share is a per-node, per-tick fraction (entry 1, async nodes 0, else sync-carried inflow share). A shared DB charges clients only for their share of its drops, and a cut producer→queue edge counts as a client error (the enqueue failed).
+- 2026-11-06 (T-8.2, lead call): `servedRps` is now client-facing throughput; async drops don't reduce it.
+- 2026-11-06 (T-8.2, lead review): nothing past an async node is on the client latency path (consumers pull), the same rule as for errors. Carried into the T-8.4 plan's `clientPathTerms`.
+- 2026-11-06 (T-8.2, lead call): the queue node badge shows backlog in messages, amber while buffering and red only when overloaded.

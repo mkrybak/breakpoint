@@ -14,6 +14,7 @@ export function RequirementsPanel() {
   const setBaseRps = useScenarioStore((s) => s.setBaseRps);
   const updatePass = useScenarioStore((s) => s.updatePass);
   const setStrongConsistency = useScenarioStore((s) => s.setStrongConsistency);
+  const setMaxLagSec = useScenarioStore((s) => s.setMaxLagSec);
 
   return (
     <section>
@@ -40,6 +41,14 @@ export function RequirementsPanel() {
           max={1}
           step={0.005}
           onChange={(value) => updatePass({ maxErrorRate: value })}
+        />
+        <OptionalNumberField
+          label="Max consumer lag (s)"
+          value={scenario.pass.maxLagSec}
+          min={0}
+          step={1}
+          placeholder="no limit"
+          onChange={setMaxLagSec}
         />
         <label className="flex items-center gap-2">
           <input
@@ -81,6 +90,52 @@ function NumberField({
         step={step}
         value={value}
         onChange={(event) => {
+          const next = event.target.valueAsNumber;
+          if (Number.isNaN(next)) return;
+          let clamped = next;
+          if (min !== undefined) clamped = Math.max(clamped, min);
+          if (max !== undefined) clamped = Math.min(clamped, max);
+          onChange(clamped);
+        }}
+        className={INPUT}
+      />
+    </label>
+  );
+}
+
+/** NumberField whose empty state means "unset" (onChange(null)). */
+function OptionalNumberField({
+  label,
+  value,
+  min,
+  max,
+  step,
+  placeholder,
+  onChange,
+}: {
+  label: string;
+  value: number | undefined;
+  min?: number;
+  max?: number;
+  step?: number;
+  placeholder: string;
+  onChange: (value: number | null) => void;
+}) {
+  return (
+    <label className="block">
+      <span className={FIELD_LABEL}>{label}</span>
+      <input
+        type="number"
+        min={min}
+        max={max}
+        step={step}
+        value={value ?? ""}
+        placeholder={placeholder}
+        onChange={(event) => {
+          if (event.target.value === "") {
+            onChange(null);
+            return;
+          }
           const next = event.target.valueAsNumber;
           if (Number.isNaN(next)) return;
           let clamped = next;

@@ -2,7 +2,13 @@
 
 import type { ReactNode } from "react";
 import { Pause, Play, RotateCcw, Square } from "lucide-react";
-import { formatMs, formatPct, formatRps } from "@/components/hud/hud-format";
+import {
+  formatLag,
+  formatMs,
+  formatPct,
+  formatRps,
+  hasAsyncNodes,
+} from "@/components/hud/hud-format";
 import { useDesignStore } from "@/stores/design-store";
 import { useScenarioStore } from "@/stores/scenario-store";
 import { useSimStore } from "@/stores/sim-store";
@@ -21,6 +27,8 @@ function useRunControls() {
   const status = useSimStore((s) => s.status);
   const agg = useSimStore((s) => s.aggregates);
   const runGraph = useSimStore((s) => s.runGraph);
+  // runGraph is null when idle, so the idle HUD follows the live design
+  const hasAsync = useDesignStore((s) => hasAsyncNodes(runGraph ?? s.graph));
   const run = useSimStore((s) => s.run);
   const pause = useSimStore((s) => s.pause);
   const resume = useSimStore((s) => s.resume);
@@ -33,7 +41,17 @@ function useRunControls() {
     run(graph, scenario);
   };
 
-  return { status, agg, runGraph, startRun, pause, resume, stop, hasEntry };
+  return {
+    status,
+    agg,
+    runGraph,
+    hasAsync,
+    startRun,
+    pause,
+    resume,
+    stop,
+    hasEntry,
+  };
 }
 
 type RunControls = ReturnType<typeof useRunControls>;
@@ -48,7 +66,17 @@ export function MetricsBar({
 } = {}) {
   const rc = useRunControls();
   if (variant === "simple") return <SimpleBar controls={controls} {...rc} />;
-  const { status, agg, runGraph, startRun, pause, resume, stop, hasEntry } = rc;
+  const {
+    status,
+    agg,
+    runGraph,
+    hasAsync,
+    startRun,
+    pause,
+    resume,
+    stop,
+    hasEntry,
+  } = rc;
 
   const live = status !== "idle";
   const bottleneck =
@@ -98,9 +126,22 @@ export function MetricsBar({
         />
         <Metric
           label="Errors"
+          title="Requests the client saw fail. Work dropped after it was queued is not counted here."
           value={live ? formatPct(agg.errorRate) : "—"}
           sub={live ? `peak ${formatPct(agg.peakErrorRate)}` : undefined}
         />
+        {hasAsync && (
+          <Metric
+            label="Lag"
+            title="Max consumer lag: how far behind (seconds) the slowest queue's consumers are. Not part of the error rate."
+            value={live ? formatLag(agg.maxLagSec) : "—"}
+            sub={
+              live
+                ? `peak ${formatLag(agg.peakLagSec)}${agg.asyncLost >= 1 ? ` · ${formatRps(agg.asyncLost)} lost` : ""}`
+                : undefined
+            }
+          />
+        )}
         <Metric
           label="Served"
           value={live ? `${formatRps(agg.servedRps)} rps` : "—"}
@@ -122,11 +163,12 @@ const RUN_LG =
 const NEUTRAL_LG =
   "flex h-10 items-center gap-2 rounded-lg border border-neutral-700 bg-neutral-900 px-4 text-sm font-medium text-neutral-200 transition-colors duration-150 hover:border-neutral-500 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-300";
 
-/** Quick mode's HUD: a dominant Run button, optional menus, and three numbers. */
+/** Quick mode's HUD: a dominant Run button, optional menus, and three numbers (four with a queue). */
 function SimpleBar({
   controls,
   status,
   agg,
+  hasAsync,
   startRun,
   pause,
   resume,
@@ -174,13 +216,33 @@ function SimpleBar({
         </div>
       )}
 
-      <div className="ml-auto flex items-center gap-2">
+      {/* a fourth card only fits the Quick canvas column with tighter cards */}
+      <div
+        className={`ml-auto flex items-center ${hasAsync ? "gap-1.5" : "gap-2"}`}
+      >
         <Metric
           label="Served"
+          compact={hasAsync}
           value={live ? `${formatRps(agg.servedRps)} rps` : "—"}
         />
-        <Metric label="p95" value={live ? formatMs(agg.p95Ms) : "—"} />
-        <Metric label="Errors" value={live ? formatPct(agg.errorRate) : "—"} />
+        <Metric
+          label="p95"
+          compact={hasAsync}
+          value={live ? formatMs(agg.p95Ms) : "—"}
+        />
+        <Metric
+          label="Errors"
+          compact={hasAsync}
+          value={live ? formatPct(agg.errorRate) : "—"}
+        />
+        {hasAsync && (
+          <Metric
+            label="Queue lag"
+            compact
+            title="How far behind the queue's workers are, in seconds."
+            value={live ? formatLag(agg.maxLagSec) : "—"}
+          />
+        )}
       </div>
     </div>
   );
@@ -190,14 +252,24 @@ function Metric({
   label,
   value,
   sub,
+  title,
+  compact = false,
 }: {
   label: string;
   value: string;
   sub?: string;
+  title?: string;
+  /** tighter card (Quick bar with four metrics) */
+  compact?: boolean;
 }) {
   return (
-    <div className="min-w-20 rounded-lg border border-neutral-800 bg-neutral-900 px-3 py-1">
-      <div className="text-[9px] font-medium tracking-wider text-neutral-500 uppercase">
+    <div
+      title={title}
+      className={`rounded-lg border border-neutral-800 bg-neutral-900 py-1 ${
+        compact ? "min-w-16 px-2" : "min-w-20 px-3"
+      }`}
+    >
+      <div className="text-[9px] font-medium tracking-wider whitespace-nowrap text-neutral-500 uppercase">
         {label}
       </div>
       <div className="truncate font-mono text-sm text-neutral-100">{value}</div>

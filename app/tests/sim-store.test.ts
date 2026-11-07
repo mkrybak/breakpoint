@@ -294,6 +294,9 @@ describe("foldAggregates", () => {
     peakErrorRate: 0,
     bottleneckNodeId: null,
     bottleneckUtil: 0,
+    maxLagSec: 0,
+    peakLagSec: 0,
+    asyncLost: 0,
   };
 
   const frame = (perNode: Record<string, number>) => ({
@@ -308,6 +311,8 @@ describe("foldAggregates", () => {
     p95Ms: 120,
     errorRate: 0.02,
     servedRps: 900,
+    asyncDroppedRps: 0,
+    maxLagSec: 0,
     events: [],
   });
 
@@ -326,6 +331,32 @@ describe("foldAggregates", () => {
     expect(b.peakP95Ms).toBe(500); // prior peak wins
   });
 
+  it("tracks latest/peak consumer lag and cumulative async losses", () => {
+    const a = foldAggregates(
+      zero,
+      { ...frame({}), maxLagSec: 2, asyncDroppedRps: 500 },
+      [],
+    );
+    const b = foldAggregates(
+      a,
+      { ...frame({}), maxLagSec: 1, asyncDroppedRps: 500 },
+      [],
+    );
+    expect(b.maxLagSec).toBe(1);
+    expect(b.peakLagSec).toBe(2);
+    expect(b.asyncLost).toBe(100);
+  });
+
+  it("folds pre-M8 frames without lag/async fields to 0", () => {
+    const old: Record<string, unknown> = { ...frame({}) };
+    delete old.asyncDroppedRps;
+    delete old.maxLagSec;
+    const a = foldAggregates(zero, old as unknown as SimFrame, []);
+    expect(a.maxLagSec).toBe(0);
+    expect(a.peakLagSec).toBe(0);
+    expect(a.asyncLost).toBe(0);
+  });
+
   it("returns a null bottleneck when there are no nodes", () => {
     const a = foldAggregates(zero, frame({}), []);
     expect(a.bottleneckNodeId).toBeNull();
@@ -342,6 +373,8 @@ describe("appendLog", () => {
     p95Ms: 0,
     errorRate: 0,
     servedRps: 0,
+    asyncDroppedRps: 0,
+    maxLagSec: 0,
     events,
   });
 

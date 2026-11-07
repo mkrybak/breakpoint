@@ -1,4 +1,11 @@
-import type { RunResult, Scenario, Verdict, VerdictFailure } from "@/lib/core";
+import type {
+  DesignGraph,
+  RunResult,
+  Scenario,
+  Verdict,
+  VerdictFailure,
+} from "@/lib/core";
+import { getComponentDef } from "@/lib/registry";
 import type { SimStatus } from "@/stores/sim-store";
 
 /** p95 latency → "142 ms". */
@@ -70,6 +77,16 @@ export function formatSec(t: number): string {
   return `${Number(t.toFixed(1))}s`;
 }
 
+/** Consumer lag seconds → "0.4 s", "12 s" (one decimal under 10s). */
+export function formatLag(sec: number): string {
+  return `${sec < 10 ? sec.toFixed(1) : Math.round(sec)} s`;
+}
+
+/** True when the design has a queue/stream — the HUD then shows consumer lag. */
+export function hasAsyncNodes(graph: DesignGraph): boolean {
+  return graph.nodes.some((n) => getComponentDef(n.kind).category === "async");
+}
+
 /** Quick mode's read-only goal line, e.g. "Keep p95 under 200 ms and errors under 1%." */
 export function describeScenarioGoal(scenario: Scenario): string {
   let goal = `Keep p95 under ${scenario.pass.p95Ms} ms and errors under ${formatBudgetPct(scenario.pass.maxErrorRate)}`;
@@ -78,6 +95,9 @@ export function describeScenarioGoal(scenario: Scenario): string {
   }
   if (scenario.pass.consistency === "strong") {
     goal += ", with strongly consistent reads";
+  }
+  if (scenario.pass.maxLagSec !== undefined) {
+    goal += `, with queued work never more than ${scenario.pass.maxLagSec}s behind`;
   }
   return `${goal}.`;
 }
@@ -94,6 +114,8 @@ const PLAIN_FAILURE: Record<
     `Losing a server hurt users: errors went over ${formatBudgetPct(s.pass.maxErrorRate)} at ${formatSec(f.atSec)}, right after it went down.`,
   consistency: () =>
     "Some reads can return stale data, but this scenario needs strong consistency.",
+  lag: (f, s) =>
+    `Background work fell behind: queue lag went over ${s.pass.maxLagSec}s at ${formatSec(f.atSec)}.`,
 };
 
 export const PLAIN_CAPACITY_TIP =

@@ -6,7 +6,7 @@ import type {
   SimFrame,
   StressRule,
 } from "@/lib/core";
-import { createSimWorker } from "@/lib/simulation";
+import { createSimWorker, TICKS_PER_SEC } from "@/lib/simulation";
 import type { SimWorkerHandle, WorkerToMain } from "@/lib/simulation";
 import { chaosAction, simRunAction } from "@/lib/actions";
 import { recordInterviewAction } from "@/stores/design-store";
@@ -33,6 +33,11 @@ export interface SimAggregates {
   /** highest-util node in the latest frame; ties broken by runGraph node order */
   bottleneckNodeId: string | null;
   bottleneckUtil: number;
+  /** latest frame's max consumer lag (s) */
+  maxLagSec: number;
+  peakLagSec: number;
+  /** cumulative requests lost off the client path (Σ asyncDroppedRps / 10) */
+  asyncLost: number;
 }
 
 /** Live event-log cap. The full history stays in `frames[i].events`. */
@@ -53,6 +58,9 @@ function emptyAggregates(): SimAggregates {
     peakErrorRate: 0,
     bottleneckNodeId: null,
     bottleneckUtil: 0,
+    maxLagSec: 0,
+    peakLagSec: 0,
+    asyncLost: 0,
   };
 }
 
@@ -71,6 +79,8 @@ export function foldAggregates(
       bottleneckNodeId = id;
     }
   }
+  // run files exported before M8 have frames without these fields
+  const lag = frame.maxLagSec ?? 0;
   return {
     elapsedSec: frame.t,
     p95Ms: frame.p95Ms,
@@ -80,6 +90,9 @@ export function foldAggregates(
     peakErrorRate: Math.max(prev.peakErrorRate, frame.errorRate),
     bottleneckNodeId,
     bottleneckUtil: bottleneckUtil < 0 ? 0 : bottleneckUtil,
+    maxLagSec: lag,
+    peakLagSec: Math.max(prev.peakLagSec, lag),
+    asyncLost: prev.asyncLost + (frame.asyncDroppedRps ?? 0) / TICKS_PER_SEC,
   };
 }
 

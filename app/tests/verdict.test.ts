@@ -9,10 +9,12 @@ import type {
 import { simulate } from "../src/lib/simulation/engine";
 import { compileRules } from "../src/lib/simulation/rules";
 import {
+  asyncLossAdvisor,
   consistencyCriterion,
   errorRateCriterion,
   evaluateVerdict,
   killSurvivalCriterion,
+  lagCriterion,
   overProvisioningAdvisor,
   p95Criterion,
   prematureShardingAdvisor,
@@ -72,6 +74,8 @@ function frame(t: number, overrides: Partial<SimFrame> = {}): SimFrame {
     p95Ms: 10,
     errorRate: 0,
     servedRps: 0,
+    asyncDroppedRps: 0,
+    maxLagSec: 0,
     events: [],
     ...overrides,
   };
@@ -384,6 +388,114 @@ describe("queue-on-sync-path advisor", () => {
     expect(
       queueOnSyncPathAdvisor({ graph: q, scenario: scenario(), frames: [] }),
     ).toEqual([]);
+  });
+});
+
+describe("lag criterion", () => {
+  const qg = graph(
+    [node("c", "client"), node("a"), node("q", "queue")],
+    [edge("c", "a"), edge("a", "q", { kind: "async" })],
+  );
+  const lagFrames = (lags: number[]) =>
+    lags.map((lag, i) =>
+      frame(i / 10, {
+        maxLagSec: lag,
+        perNode: {
+          a: nodeMetrics(0.5),
+          q: { ...nodeMetrics(0.5), queueDepth: 0, lagSec: lag },
+        },
+      }),
+    );
+
+  it("is inactive without pass.maxLagSec", () => {
+    expect(
+      lagCriterion({
+        graph: qg,
+        scenario: scenario(),
+        frames: lagFrames([99]),
+      }),
+    ).toEqual([]);
+  });
+
+  it("fails once, on the first frame strictly over budget", () => {
+    const failures = lagCriterion({
+      graph: qg,
+      scenario: scenario({
+        pass: { p95Ms: 200, maxErrorRate: 0.01, maxLagSec: 5 },
+      }),
+      frames: lagFrames([0, 5, 5.5, 9]),
+    });
+    expect(failures).toHaveLength(1);
+    expect(failures[0].criterion).toBe("lag");
+    expect(failures[0].atSec).toBe(0.2);
+    expect(failures[0].detail).toContain('"q"');
+    expect(failures[0].detail).toContain("5.5s");
+  });
+
+  it("passes when lag equals the budget", () => {
+    expect(
+      lagCriterion({
+        graph: qg,
+        scenario: scenario({
+          pass: { p95Ms: 200, maxErrorRate: 0.01, maxLagSec: 5 },
+        }),
+        frames: lagFrames([0, 5, 5]),
+      }),
+    ).toEqual([]);
+  });
+});
+
+describe("async-loss advisor", () => {
+  it("reports jobs lost after being queued", () => {
+    const advisories = asyncLossAdvisor({
+      graph: g,
+      scenario: scenario(),
+      frames: frameSeries(3, () => ({ asyncDroppedRps: 1000 })),
+    });
+    expect(advisories).toHaveLength(1);
+    expect(advisories[0]).toContain("300 jobs");
+  });
+
+  it("is silent when no async work was lost", () => {
+    expect(
+      asyncLossAdvisor({
+        graph: g,
+        scenario: scenario(),
+        frames: frameSeries(3),
+      }),
+    ).toEqual([]);
+  });
+});
+
+describe("lag NFR — integration (T-8.1 queue repro)", () => {
+  const qg = graph(
+    [
+      node("c", "client"),
+      node("app", "app_server", { replicas: 5 }),
+      node("q", "queue"),
+      node("w", "worker", { replicas: 2 }),
+    ],
+    [edge("c", "app"), edge("app", "q", { kind: "async" }), edge("q", "w")],
+  );
+  const run = (maxLagSec: number) => {
+    const sc = scenario({
+      durationSec: 30,
+      baseRps: 1500,
+      timeline: [{ at: 5, rule: "spike", factor: 3, forSec: 3 }],
+      pass: { p95Ms: 10000, maxErrorRate: 0.01, maxLagSec },
+    });
+    return evaluateVerdict(qg, sc, simulate(qg, sc, compileRules(qg, sc)));
+  };
+
+  it("passes with a generous lag budget", () => {
+    expect(run(60).passed).toBe(true);
+  });
+
+  it("fails only on lag with a tight budget — errors stay clean", () => {
+    const v = run(1);
+    expect(v.passed).toBe(false);
+    expect(v.failures.filter((f) => f.criterion === "lag")).toHaveLength(1);
+    expect(v.failures.some((f) => f.criterion === "error-rate")).toBe(false);
   });
 });
 

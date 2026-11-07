@@ -293,8 +293,8 @@ function fixtureResult(): RunResult {
     scenarioId: "s1",
     designSnapshot: fixtureGraph(),
     frames: [
-      { t: 0, perNode: {}, perEdge: {}, p95Ms: 10, errorRate: 0, servedRps: 100, events: [] },
-      { t: 0.1, perNode: {}, perEdge: {}, p95Ms: 12, errorRate: 0, servedRps: 100, events: ["tick"] },
+      { t: 0, perNode: {}, perEdge: {}, p95Ms: 10, errorRate: 0, servedRps: 100, asyncDroppedRps: 0, maxLagSec: 0, events: [] },
+      { t: 0.1, perNode: {}, perEdge: {}, p95Ms: 12, errorRate: 0, servedRps: 100, asyncDroppedRps: 0, maxLagSec: 0, events: ["tick"] },
     ],
     verdict: { passed: true, failures: [], advisories: [] },
   };

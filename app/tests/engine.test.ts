@@ -6,6 +6,7 @@ import type {
   Scenario,
 } from "../src/lib/core";
 import {
+  clientShares,
   flowRps,
   propagateTraffic,
   scaleFlow,
@@ -297,6 +298,8 @@ describe("simulate — golden 1 at frame level", () => {
     expect(frames[1].events).toEqual([]);
     expect(frames.map((f) => f.errorRate)).toEqual([0, 0, 0.2, 0.2]);
     expect(frames.map((f) => f.servedRps)).toEqual([5000, 5000, 4000, 4000]);
+    expect(frames.map((f) => f.asyncDroppedRps)).toEqual([0, 0, 0, 0]);
+    expect(frames.map((f) => f.maxLagSec)).toEqual([0, 0, 0, 0]);
     expect(frames.map((f) => f.perEdge["e-c-app"].rps)).toEqual([
       5000, 5000, 5000, 5000,
     ]);
@@ -418,6 +421,29 @@ describe("simulate — latency path", () => {
     expect(frames[0].p95Ms).toBe(1.6 * (1 + 8 / (1 - 0.5)));
   });
 
+  it("stops the client path at a queue: consumers behind it add no latency", () => {
+    const g = graph(
+      [
+        node("c", "client"),
+        node("app"),
+        node("q", "queue"),
+        node("w", "worker", { replicas: 1 }),
+      ],
+      [edge("c", "app"), edge("app", "q"), edge("q", "w")],
+    );
+    const frames = simulate(
+      g,
+      scenario({ durationSec: 1, baseRps: 1500, readRatio: 1 }),
+    );
+    expect(frames).toHaveLength(10);
+    const appMs = 8 / (1 - 1500 / 4000);
+    const queueMs = 4 / (1 - 1500 / 800000); // enqueue cost only
+    for (const f of frames) {
+      expect(f.perNode["w"].state).toBe("saturated");
+      expect(f.p95Ms).toBe(1.6 * (1 + (appMs + queueMs)));
+    }
+  });
+
   it("stays total on a graph without an entry node", () => {
     const g = graph([node("a")], [], "missing");
     const frames = simulate(g, scenario({ durationSec: 0.2 }));
@@ -536,6 +562,122 @@ describe("simulate — queue with no one pulling", () => {
     expect(frames.map((f) => f.perNode["q"].queueDepth)).toEqual([0, 50, 0]);
     expect(frames.map((f) => f.perEdge["e-q-w"].rps)).toEqual([500, 0, 1000]);
     expect(frames.map((f) => f.errorRate)).toEqual([0, 0, 0]);
+  });
+});
+
+describe("simulate — T-8.2 client vs async drops", () => {
+  it("(a) drops at a worker behind an async edge are async, not client errors", () => {
+    const g = graph(
+      [node("c", "client"), node("a"), node("w", "worker")],
+      [edge("c", "a"), edge("a", "w", { kind: "async" })],
+    );
+    const frames = simulate(
+      g,
+      scenario({ durationSec: 0.4, baseRps: 2000, readRatio: 1 }),
+    );
+    expect(frames.map((f) => f.errorRate)).toEqual([0, 0, 0, 0]);
+    expect(frames.map((f) => f.servedRps)).toEqual([2000, 2000, 2000, 2000]);
+    expect(frames.map((f) => f.asyncDroppedRps)).toEqual([
+      500, 1000, 1000, 1000,
+    ]);
+    expect(frames.map((f) => f.perNode["w"].dropped)).toEqual([
+      500, 1000, 1000, 1000,
+    ]);
+  });
+
+  // a fans out sync to s and async to w; w also calls s — s is half client
+  const shared = graph(
+    [
+      node("c", "client"),
+      node("a", "app_server", { replicas: 3 }),
+      node("s"),
+      node("w", "worker", { replicas: 10 }),
+    ],
+    [
+      edge("c", "a"),
+      edge("a", "s"),
+      edge("a", "w", { kind: "async" }),
+      edge("w", "s"),
+    ],
+  );
+
+  it("(b) a shared sink splits its drops by client share", () => {
+    const frames = simulate(
+      shared,
+      scenario({ durationSec: 0.4, baseRps: 3000, readRatio: 1 }),
+    );
+    expect(frames.map((f) => f.perNode["s"].dropped)).toEqual([
+      0, 2000, 2000, 2000,
+    ]);
+    expect(frames.map((f) => f.errorRate)).toEqual([
+      0,
+      1000 / 3000,
+      1000 / 3000,
+      1000 / 3000,
+    ]);
+    expect(frames.map((f) => f.asyncDroppedRps)).toEqual([0, 1000, 1000, 1000]);
+    expect(frames.map((f) => f.servedRps)).toEqual([3000, 2000, 2000, 2000]);
+  });
+
+  it("(c) queue retention overflow is async: client errorRate stays 0", () => {
+    const g = graph(
+      [
+        node("c", "client"),
+        node("app", "app_server", { replicas: 5 }),
+        node("queue", "queue", { retentionMsgs: 1000 }),
+        node("w", "worker", { replicas: 1 }),
+      ],
+      [
+        edge("c", "app"),
+        edge("app", "queue", { kind: "async" }),
+        edge("queue", "w"),
+      ],
+    );
+    // backlog grows 2000 msgs/s, so the 1000-msg retention overflows by ~0.5s
+    const frames = simulate(g, scenario({ durationSec: 2, baseRps: 3000 }));
+    expect(frames.every((f) => f.errorRate === 0)).toBe(true);
+    expect(frames.some((f) => f.perNode["queue"].dropped > 0)).toBe(true);
+    expect(
+      frames.reduce((sum, f) => sum + f.asyncDroppedRps, 0),
+    ).toBeGreaterThan(0);
+  });
+
+  it("(d) frame maxLagSec is the per-node max lagSec", () => {
+    const g = graph(
+      [
+        node("c", "client"),
+        node("app", "app_server", { replicas: 5 }),
+        node("q", "queue"),
+        node("w", "worker", { replicas: 2 }),
+      ],
+      [edge("c", "app"), edge("app", "q", { kind: "async" }), edge("q", "w")],
+    );
+    const sc = scenario({
+      durationSec: 30,
+      baseRps: 1500,
+      timeline: [{ at: 5, rule: "spike", factor: 3, forSec: 3 }],
+    });
+    const frames = simulate(g, sc, compileRules(g, sc));
+    for (const f of frames) {
+      expect(f.maxLagSec).toBe(
+        Math.max(0, ...Object.values(f.perNode).map((n) => n.lagSec ?? 0)),
+      );
+    }
+    expect(Math.max(...frames.map((f) => f.maxLagSec))).toBeGreaterThan(1);
+    expect(frames[frames.length - 1].maxLagSec).toBe(0);
+    expect(frames.every((f) => f.errorRate === 0)).toBe(true);
+  });
+
+  it("clientShares: entry 1, async-fed 0, mixed sink by sync in-flow", () => {
+    const prop = propagateTraffic(shared, splitFlow(3000, 1));
+    const shares = clientShares(shared, prop, new Map());
+    expect(Object.fromEntries(shares)).toEqual({ c: 1, a: 1, w: 0, s: 0.5 });
+  });
+
+  it("clientShares: a node with zero inflow keeps its previous share", () => {
+    const prop = propagateTraffic(shared, splitFlow(0, 1));
+    const shares = clientShares(shared, prop, new Map([["s", 0.25]]));
+    expect(shares.get("s")).toBe(0.25);
   });
 });
 

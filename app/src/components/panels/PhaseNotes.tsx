@@ -33,6 +33,9 @@ export function nfrNotesTemplate(scenario: Scenario): string {
     `- Target load: ${baseRps} RPS`,
     `- p95 latency budget: ${pass.p95Ms} ms`,
     `- Max error rate: ${errorPct}%`,
+    ...(pass.maxLagSec !== undefined
+      ? [`- Max consumer lag: ${pass.maxLagSec}s`]
+      : []),
     `- Consistency: ${consistency}`,
     "",
     "## Functional requirements",

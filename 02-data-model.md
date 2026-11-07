@@ -106,6 +106,7 @@ interface Scenario {
     maxErrorRate: number;     // e.g. 0.01
     consistency?: "strong";   // if set, verdict checks read-path consistency
     minSurvivedKills?: number;
+    maxLagSec?: number;       // if set, verdict fails when any async node's consumer lag exceeds it (s)
   };
   seed: number;               // determinism
 }
@@ -119,7 +120,9 @@ interface SimFrame {           // one per tick (100ms), streamed worker → UI
   perNode: Record<string, { util: number; queued: number; dropped: number; state: "ok"|"hot"|"saturated"|"overloaded"|"down";
                             queueDepth?: number; lagSec?: number }>;   // NodeFrame; queueDepth (msgs) / lagSec async nodes only
   perEdge: Record<string, { rps: number }>;
-  p95Ms: number; errorRate: number; servedRps: number;
+  p95Ms: number; errorRate: number; servedRps: number;   // errorRate/servedRps: client path only
+  asyncDroppedRps: number;     // lost off the client path (queue overflow, consumer drops) — never in errorRate
+  maxLagSec: number;           // max async-node lagSec this tick; 0 with no async nodes
   events: string[];            // log lines emitted this tick
 }
 
@@ -224,3 +227,4 @@ scorecards   (id, run_id, grader_id → users, rubric_scores JSONB, feedback_md 
 - 2026-11-05 (T-7.2 planning): `DesignRecord.mode: DesignMode` ("quick" | "practice" | "interview", shell type in `persistence/local.ts`, never in `src/lib/**`). `parseDesignRecord` loads a missing or unknown mode as "practice" (no migration, stored records aren't rewritten). `buildDesignRecord(id, name, graph, mode, phaseNotes?, actionLog?)`: mode is required so no save path can silently default it. design-store holds `designMode`, set only by `attachDesign`; in-place `importRecord` keeps it (importing never converts a mode). Imports that create a design (review-screen bundle import, any future landing import) keep the file's parsed mode.
 - 2026-11-05 (T-7.6 planning): Quick-mode challenge progress is per browser, not per design: `bp:challenges:solved` holds a JSON array of solved challenge scenario ids (forgiving parse, best-effort write).
 - 2026-11-06 (T-8.1 planning): SimFrame per-node type named NodeFrame; queueDepth/lagSec optional, async-category only — old frames/bundles stay valid.
+- 2026-11-06 (T-8.2 planning): `Scenario.pass.maxLagSec?` (optional lag NFR) and required `SimFrame.asyncDroppedRps` / `maxLagSec`; errorRate counts client-path drops only. Rules in 03-simulation-engine Decisions (T-8.2).

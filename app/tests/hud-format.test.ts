@@ -6,12 +6,15 @@ import {
   describeScenarioGoal,
   describeVerdictPlainly,
   formatBudgetPct,
+  formatLag,
   formatMs,
   formatPct,
   formatRps,
   formatSec,
+  hasAsyncNodes,
   PLAIN_CAPACITY_TIP,
 } from "@/components/hud/hud-format";
+import { starterGraph } from "@/components/quick/starter";
 
 const graph: DesignGraph = { nodes: [], edges: [], entryNodeId: "" };
 function runResult(passed: boolean): RunResult {
@@ -133,6 +136,41 @@ describe("describeScenarioGoal", () => {
       /, even when a server goes down\.$/,
     );
   });
+
+  it("mentions the consumer-lag limit when set", () => {
+    const s = { ...steady, pass: { ...steady.pass, maxLagSec: 10 } };
+    expect(
+      describeScenarioGoal(s).endsWith(
+        ", with queued work never more than 10s behind.",
+      ),
+    ).toBe(true);
+  });
+});
+
+describe("formatLag / hasAsyncNodes", () => {
+  it("shows one decimal under 10s, whole seconds above", () => {
+    expect(formatLag(0)).toBe("0.0 s");
+    expect(formatLag(3.25)).toBe("3.3 s");
+    expect(formatLag(12.4)).toBe("12 s");
+  });
+
+  it("detects a queue in the design", () => {
+    const withQueue: DesignGraph = {
+      nodes: [
+        {
+          id: "q",
+          kind: "queue",
+          label: "q",
+          position: { x: 0, y: 0 },
+          config: {},
+        },
+      ],
+      edges: [],
+      entryNodeId: "",
+    };
+    expect(hasAsyncNodes(withQueue)).toBe(true);
+    expect(hasAsyncNodes(starterGraph())).toBe(false);
+  });
 });
 
 describe("describeVerdictPlainly", () => {
@@ -191,6 +229,18 @@ describe("describeVerdictPlainly", () => {
     );
     expect(lines).toHaveLength(1);
     expect(lines.join(" ")).not.toMatch(/single point of failure/);
+  });
+
+  it("explains a lag failure in plain words", () => {
+    const s = { ...steady, pass: { ...steady.pass, maxLagSec: 10 } };
+    expect(
+      describeVerdictPlainly(
+        failed([{ criterion: "lag", atSec: 4.5, detail: "x" }]),
+        s,
+      ),
+    ).toContain(
+      "Background work fell behind: queue lag went over 10s at 4.5s.",
+    );
   });
 
   it("explains a failure in plain words and adds the canvas tip", () => {
