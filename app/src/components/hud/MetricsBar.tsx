@@ -1,15 +1,32 @@
 "use client";
 
-import type { ReactNode } from "react";
+import {
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { Pause, Play, RotateCcw, Square } from "lucide-react";
 import {
+  ERRORS_HINT,
   formatLag,
   formatMs,
   formatPct,
   formatRps,
+  formatSec,
   hasAsyncNodes,
+  LAG_HINT,
   P95_HINT,
+  P95_MODEL_NOTE,
+  QUEUE_LAG_HINT,
+  topP95Contributors,
 } from "@/components/hud/hud-format";
+import type { DesignGraph, SimFrame } from "@/lib/core";
+import {
+  dismissP95ModelNote,
+  p95ModelNoteDue,
+} from "@/persistence/notices";
 import { useDesignStore } from "@/stores/design-store";
 import { useScenarioStore } from "@/stores/scenario-store";
 import { useSimStore } from "@/stores/sim-store";
@@ -28,6 +45,7 @@ function useRunControls() {
   const status = useSimStore((s) => s.status);
   const agg = useSimStore((s) => s.aggregates);
   const runGraph = useSimStore((s) => s.runGraph);
+  const frame = useSimStore((s) => s.latestFrame);
   // runGraph is null when idle, so the idle HUD follows the live design
   const hasAsync = useDesignStore((s) => hasAsyncNodes(runGraph ?? s.graph));
   const run = useSimStore((s) => s.run);
@@ -46,6 +64,8 @@ function useRunControls() {
     status,
     agg,
     runGraph,
+    /** the frame the canvas shows (live, or the scrubbed replay frame) */
+    frame,
     hasAsync,
     startRun,
     pause,
@@ -71,6 +91,7 @@ export function MetricsBar({
     status,
     agg,
     runGraph,
+    frame,
     hasAsync,
     startRun,
     pause,
@@ -120,22 +141,23 @@ export function MetricsBar({
       </div>
 
       <div className="ml-auto flex items-center gap-2">
-        <Metric
-          label="p95"
-          hint={P95_HINT}
+        <P95Metric
           value={live ? formatMs(agg.p95Ms) : "—"}
           sub={live ? `peak ${formatMs(agg.peakP95Ms)}` : undefined}
+          live={live}
+          frame={frame}
+          graph={runGraph}
         />
         <Metric
           label="Errors"
-          title="Requests the client saw fail. Work dropped after it was queued is not counted here."
+          hint={ERRORS_HINT}
           value={live ? formatPct(agg.errorRate) : "—"}
           sub={live ? `peak ${formatPct(agg.peakErrorRate)}` : undefined}
         />
         {hasAsync && (
           <Metric
             label="Lag"
-            title="Max consumer lag: how far behind (seconds) the slowest queue's consumers are. Not part of the error rate."
+            hint={LAG_HINT}
             value={live ? formatLag(agg.maxLagSec) : "—"}
             sub={
               live
@@ -170,6 +192,8 @@ function SimpleBar({
   controls,
   status,
   agg,
+  runGraph,
+  frame,
   hasAsync,
   startRun,
   pause,
@@ -227,14 +251,16 @@ function SimpleBar({
           compact={hasAsync}
           value={live ? `${formatRps(agg.servedRps)} rps` : "—"}
         />
-        <Metric
-          label="p95"
-          hint={P95_HINT}
+        <P95Metric
           compact={hasAsync}
           value={live ? formatMs(agg.p95Ms) : "—"}
+          live={live}
+          frame={frame}
+          graph={runGraph}
         />
         <Metric
           label="Errors"
+          hint={ERRORS_HINT}
           compact={hasAsync}
           value={live ? formatPct(agg.errorRate) : "—"}
         />
@@ -242,7 +268,7 @@ function SimpleBar({
           <Metric
             label="Queue lag"
             compact
-            title="How far behind the queue's workers are, in seconds."
+            hint={QUEUE_LAG_HINT}
             value={live ? formatLag(agg.maxLagSec) : "—"}
           />
         )}
@@ -251,30 +277,155 @@ function SimpleBar({
   );
 }
 
+/** p95's popover body: the frame's biggest contributors (engine p95ByNode). */
+function P95Breakdown({
+  frame,
+  graph,
+}: {
+  frame: SimFrame;
+  graph: DesignGraph;
+}) {
+  const top = topP95Contributors(frame, graph);
+  if (top.length === 0) return null;
+  return (
+    <div className="mt-3 border-t border-neutral-800 pt-2">
+      <p className="text-[10px] font-semibold tracking-wider text-neutral-500 uppercase">
+        Biggest share at{" "}
+        <span className="normal-case">{formatSec(frame.t)}</span>
+      </p>
+      <ol className="mt-1.5 space-y-1">
+        {top.map((c) => (
+          <li key={c.id} className="flex items-baseline gap-2 text-xs">
+            <span className="min-w-0 truncate text-neutral-200">{c.label}</span>
+            <span className="ml-auto shrink-0 font-mono text-neutral-400">
+              {formatMs(c.ms)} · {Math.round(c.share * 100)}%
+            </span>
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
+}
+
+/** One-time "new p95 model" note for users with designs saved before T-8.7. */
+function useP95ModelNote() {
+  const [due, setDue] = useState(false);
+  useEffect(() => {
+    // localStorage is read after mount, not during render (no hydration
+    // mismatch), and once: a later autosave can't change eligibility.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setDue(p95ModelNoteDue());
+  }, []);
+  const dismiss = () => {
+    dismissP95ModelNote();
+    setDue(false);
+  };
+  return { due, dismiss };
+}
+
+function P95ModelNote({ onDismiss }: { onDismiss: () => void }) {
+  return (
+    <div
+      role="status"
+      className="absolute top-full right-0 z-30 mt-2 w-64 rounded-xl border border-sky-500/40 bg-neutral-900 p-3 text-left shadow-xl shadow-black/40"
+    >
+      <p className="text-xs font-semibold text-sky-300">New p95 model</p>
+      <p className="mt-1 text-xs leading-snug text-neutral-300">
+        {P95_MODEL_NOTE}
+      </p>
+      <button
+        type="button"
+        onClick={onDismiss}
+        className="mt-2 h-8 rounded-md border border-neutral-700 px-3 text-xs font-medium text-neutral-200 transition-colors duration-150 hover:border-neutral-500 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-300"
+      >
+        Got it
+      </button>
+    </div>
+  );
+}
+
+function P95Metric({
+  value,
+  sub,
+  compact,
+  live,
+  frame,
+  graph,
+}: {
+  value: string;
+  sub?: string;
+  compact?: boolean;
+  live: boolean;
+  frame: SimFrame | null;
+  graph: DesignGraph | null;
+}) {
+  const note = useP95ModelNote();
+  const showNote = live && note.due;
+  return (
+    <Metric
+      label="p95"
+      hint={P95_HINT}
+      value={value}
+      sub={sub}
+      compact={compact}
+      detail={
+        frame && graph ? <P95Breakdown frame={frame} graph={graph} /> : undefined
+      }
+      onOpen={showNote ? note.dismiss : undefined}
+      callout={showNote ? <P95ModelNote onDismiss={note.dismiss} /> : undefined}
+    />
+  );
+}
+
 function Metric({
   label,
   value,
   sub,
-  title,
   hint,
+  detail,
+  callout,
+  onOpen,
   compact = false,
 }: {
   label: string;
   value: string;
   sub?: string;
-  title?: string;
-  /** explains how the number is derived: native tooltip + dotted label */
+  /** explains how the number is derived: dotted label; click/tap opens a popover */
   hint?: string;
+  /** extra popover content under the hint */
+  detail?: ReactNode;
+  /** rendered under the card while the popover is closed */
+  callout?: ReactNode;
+  /** called when the popover opens */
+  onOpen?: () => void;
   /** tighter card (Quick bar with four metrics) */
   compact?: boolean;
 }) {
-  return (
-    <div
-      title={hint ?? title}
-      className={`rounded-lg border border-neutral-800 bg-neutral-900 py-1 ${
-        compact ? "min-w-16 px-2" : "min-w-20 px-3"
-      }${hint ? " cursor-help" : ""}`}
-    >
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const popId = useId();
+
+  useEffect(() => {
+    if (!open) return;
+    const onPointerDown = (event: PointerEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [open]);
+
+  const card = `rounded-lg border border-neutral-800 bg-neutral-900 py-1 ${
+    compact ? "min-w-16 px-2" : "min-w-20 px-3"
+  }`;
+  const body = (
+    <>
       <div
         className={`text-[9px] font-medium tracking-wider whitespace-nowrap text-neutral-500 uppercase${
           hint
@@ -286,6 +437,40 @@ function Metric({
       </div>
       <div className="truncate font-mono text-sm text-neutral-100">{value}</div>
       {sub && <div className="font-mono text-[9px] text-neutral-500">{sub}</div>}
+    </>
+  );
+
+  if (!hint) return <div className={card}>{body}</div>;
+
+  const toggle = () => {
+    if (!open) onOpen?.();
+    setOpen(!open);
+  };
+
+  return (
+    <div ref={rootRef} className="relative">
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-controls={open ? popId : undefined}
+        onClick={toggle}
+        className={`${card} block cursor-help text-left transition-colors duration-150 hover:border-neutral-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-300 aria-expanded:border-neutral-500`}
+      >
+        {body}
+      </button>
+      {open ? (
+        <div
+          id={popId}
+          role="dialog"
+          aria-label={`About ${label}`}
+          className="absolute top-full right-0 z-30 mt-2 w-72 rounded-xl border border-neutral-700 bg-neutral-900 p-3 text-left shadow-xl shadow-black/40"
+        >
+          <p className="text-xs leading-snug text-neutral-300">{hint}</p>
+          {detail}
+        </div>
+      ) : (
+        callout
+      )}
     </div>
   );
 }

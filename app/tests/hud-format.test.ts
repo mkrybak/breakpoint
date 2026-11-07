@@ -4,6 +4,7 @@ import type {
   DesignGraph,
   RunResult,
   Scenario,
+  SimFrame,
   Verdict,
 } from "@/lib/core";
 import {
@@ -21,6 +22,7 @@ import {
   formatSec,
   hasAsyncNodes,
   PLAIN_CAPACITY_TIP,
+  topP95Contributors,
 } from "@/components/hud/hud-format";
 import { starterGraph } from "@/components/quick/starter";
 
@@ -391,5 +393,53 @@ describe("breaker trips in the verdict (T-12.1)", () => {
       "Your breaker protected Payments API, but it was still open when the run ended: 44k requests failed fast. Add capacity to Payments API so it doesn't trip.",
     );
     expect(lines).not.toContain(PLAIN_CAPACITY_TIP);
+  });
+});
+
+describe("topP95Contributors (T-12.5)", () => {
+  const g: DesignGraph = {
+    nodes: ["a", "b", "c", "d"].map((id) => ({
+      id,
+      kind: "app_server" as const,
+      label: id.toUpperCase(),
+      position: { x: 0, y: 0 },
+      config: {},
+    })),
+    edges: [],
+    entryNodeId: "a",
+  };
+  const frame = (p95ByNode?: Record<string, number>, p95Ms = 100) =>
+    ({
+      t: 1,
+      perNode: {},
+      perEdge: {},
+      p95Ms,
+      errorRate: 0,
+      servedRps: 0,
+      asyncDroppedRps: 0,
+      maxLagSec: 0,
+      events: [],
+      ...(p95ByNode ? { p95ByNode } : {}),
+    }) as SimFrame;
+
+  it("returns the top 3 by ms with their share of p95", () => {
+    const top = topP95Contributors(frame({ a: 10, b: 60, c: 25, d: 5 }), g);
+    expect(top.map((c) => c.label)).toEqual(["B", "C", "A"]);
+    expect(top.map((c) => c.share)).toEqual([0.6, 0.25, 0.1]);
+    expect(top[0]).toMatchObject({ id: "b", ms: 60 });
+  });
+
+  it("breaks ties in graph node order", () => {
+    expect(
+      topP95Contributors(frame({ b: 30, a: 30 }), g).map((c) => c.label),
+    ).toEqual(["A", "B"]);
+  });
+
+  it("is empty without a breakdown or a p95, and skips ids not in the graph", () => {
+    expect(topP95Contributors(frame(), g)).toEqual([]);
+    expect(topP95Contributors(frame({ a: 10 }, 0), g)).toEqual([]);
+    expect(
+      topP95Contributors(frame({ ghost: 90, a: 10 }), g).map((c) => c.id),
+    ).toEqual(["a"]);
   });
 });

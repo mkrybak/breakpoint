@@ -586,6 +586,84 @@ export function p95FromMoments({ meanMs, varianceMs2 }: PathMoments): number {
   return meanMs + P95_SIGMAS * Math.sqrt(varianceMs2);
 }
 
+interface NodeParts {
+  mean: Map<string, number>;
+  variance: Map<string, number>;
+}
+
+/**
+ * Per-node share of the entry's p95 (T-12.5), a companion to pathMomentsMap:
+ * the same reverse-topo pass over the same terms, but each node carries maps
+ * id → (mean part, variance part). The fold is linear in nodes' own moments:
+ * a term scales its target's mean parts by w·s and variance parts by w·s²
+ * (s = m'/m, termMs's scale). A fractional call's f(1−f)m'² and an LB's
+ * between-branch w(m'−M)² go to the term's target. At the entry: ms_k =
+ * mean_k + 2σ·var_k / Σvar (Euler allocation), so Σ ms_k = mean + 2σ.
+ * Rounded to 0.01 ms; zero entries omitted.
+ */
+export function p95Breakdown(
+  graph: DesignGraph,
+  prop: PropagationResult,
+  outputs: ReadonlyMap<string, NodeModelOutput>,
+  moments: ReadonlyMap<string, PathMoments>,
+  policies: ReadonlyMap<string, EdgePolicy> = new Map(),
+): Record<string, number> {
+  const terms = clientPathTerms(graph, prop, outputs, policies);
+  const kindById = new Map(graph.nodes.map((n) => [n.id, n.kind]));
+  const parts = new Map<string, NodeParts>();
+  const add = (m: Map<string, number>, k: string, x: number) =>
+    m.set(k, (m.get(k) ?? 0) + x);
+  for (let i = prop.order.length - 1; i >= 0; i--) {
+    const id = prop.order[i];
+    const out = outputs.get(id);
+    if (!out) continue;
+    const mean = new Map([[id, out.latencyMs]]);
+    const variance = new Map([[id, out.latencyVarMs2]]);
+    const split = isSplitSource(kindById.get(id));
+    const own = terms.get(id) ?? [];
+    const charged = own.map((term) =>
+      termMs(term, moments.get(term.target)?.meanMs ?? 0),
+    );
+    const mixMean = split
+      ? own.reduce((sum, term, k) => sum + term.weight * charged[k], 0)
+      : 0;
+    own.forEach((term, k) => {
+      const w = term.weight;
+      const target = moments.get(term.target);
+      const child = parts.get(term.target);
+      if (w <= 0 || !target || !child) return;
+      const m = charged[k];
+      const scale = target.meanMs > 0 ? m / target.meanMs : 0;
+      for (const [n, x] of child.mean) add(mean, n, w * scale * x);
+      for (const [n, x] of child.variance) {
+        add(variance, n, w * scale * scale * x);
+      }
+      const f = w - Math.floor(w);
+      add(
+        variance,
+        term.target,
+        split ? w * (m - mixMean) ** 2 : f * (1 - f) * m * m,
+      );
+    });
+    parts.set(id, { mean, variance });
+  }
+  const entry = parts.get(graph.entryNodeId);
+  const at = moments.get(graph.entryNodeId);
+  if (!entry || !at) return {};
+  let varSum = 0;
+  for (const x of entry.variance.values()) varSum += x;
+  const tail = P95_SIGMAS * Math.sqrt(at.varianceMs2);
+  const result: Record<string, number> = {};
+  for (const node of graph.nodes) {
+    const ms =
+      (entry.mean.get(node.id) ?? 0) +
+      (varSum > 0 ? (tail * (entry.variance.get(node.id) ?? 0)) / varSum : 0);
+    const rounded = Math.round(ms * 100) / 100;
+    if (rounded > 0) result[node.id] = rounded;
+  }
+  return result;
+}
+
 /** A stepping simulation: per-run state lives in the closure. */
 export interface SimRun {
   /** Advance one tick and return its frame; null once the run is complete. */
@@ -932,6 +1010,8 @@ export function createSimRun(
         };
       }
 
+      const p95ByNode = p95Breakdown(graph, prop, outputs, pathMs, policies);
+
       return {
         t: tick / TICKS_PER_SEC,
         perNode,
@@ -939,6 +1019,7 @@ export function createSimRun(
         p95Ms: p95FromMoments(
           pathMs.get(graph.entryNodeId) ?? { meanMs: 0, varianceMs2: 0 },
         ),
+        ...(Object.keys(p95ByNode).length > 0 ? { p95ByNode } : {}),
         errorRate:
           effects.offeredRps > 0
             ? Math.min(1, clientDropped / effects.offeredRps)

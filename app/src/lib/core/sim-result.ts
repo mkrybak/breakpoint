@@ -37,6 +37,14 @@ export interface SimFrame {
   perNode: Record<string, NodeFrame>;
   perEdge: Record<string, EdgeFrame>;
   p95Ms: number;
+  /**
+   * T-12.5: node id → ms of p95Ms that node accounts for: its share of the
+   * path mean plus its share of the 2σ tail by variance contribution (spread
+   * from fractional calls / LB mixtures goes to the call's target). Sums to
+   * p95Ms up to 0.01 ms rounding per entry; zero entries omitted; absent when
+   * nothing is positive (no entry). Frames from older bundles lack it.
+   */
+  p95ByNode?: Record<string, number>;
   /** client-path drops / offered (0–1); async losses are in asyncDroppedRps */
   errorRate: number;
   servedRps: number;

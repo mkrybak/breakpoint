@@ -3,6 +3,7 @@ import type {
   DesignGraph,
   RunResult,
   Scenario,
+  SimFrame,
   Verdict,
   VerdictFailure,
 } from "@/lib/core";
@@ -17,6 +18,50 @@ export function formatMs(ms: number): string {
 /** Tooltip on the HUD's p95 card: how the number is estimated (03-simulation-engine step 4). */
 export const P95_HINT =
   "95% of requests finish faster than this: estimated as the average response time plus two standard deviations, and because a component's delay gets more variable as it gets busier, p95 climbs faster than the average.";
+
+/** HUD card hints (click-to-open popovers, T-12.5). Copy moved from the cards' old native titles. */
+export const ERRORS_HINT =
+  "Requests the client saw fail. Work dropped after it was queued is not counted here.";
+export const LAG_HINT =
+  "Max consumer lag: how far behind (seconds) the slowest queue's consumers are. Not part of the error rate.";
+export const QUEUE_LAG_HINT = "How far behind the queue's workers are, in seconds.";
+
+/** One-time note for users who saved designs under the old 1.6 × mean p95 (T-12.5). */
+export const P95_MODEL_NOTE =
+  "p95 is now more realistic: tails grow faster as components get busy, so saved designs may show a higher p95 than before.";
+
+export interface P95Contributor {
+  id: string;
+  label: string;
+  /** ms of the frame's p95 this node accounts for */
+  ms: number;
+  /** ms ÷ p95Ms, 0–1 */
+  share: number;
+}
+
+/**
+ * The frame's top `limit` nodes by their part of p95 (engine p95ByNode),
+ * largest first, ties in graph node order (stable sort). [] when the frame
+ * has no breakdown (older bundles) or p95Ms ≤ 0; ids not in the graph are skipped.
+ */
+export function topP95Contributors(
+  frame: SimFrame,
+  graph: DesignGraph,
+  limit = 3,
+): P95Contributor[] {
+  const by = frame.p95ByNode;
+  if (!by || frame.p95Ms <= 0) return [];
+  return graph.nodes
+    .filter((n) => (by[n.id] ?? 0) > 0)
+    .map((n) => ({
+      id: n.id,
+      label: n.label,
+      ms: by[n.id],
+      share: by[n.id] / frame.p95Ms,
+    }))
+    .sort((a, b) => b.ms - a.ms)
+    .slice(0, limit);
+}
 
 /** Error rate 0–1 → "3.2%". */
 export function formatPct(rate: number): string {

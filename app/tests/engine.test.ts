@@ -564,6 +564,7 @@ describe("simulate — latency path", () => {
     });
     expect(frames[0].errorRate).toBe(0);
     expect(frames[0].p95Ms).toBeCloseTo(p95(1 + 16, 1 + 16 * 16), 9);
+    expect(Object.keys(frames[0].p95ByNode!)).toEqual(["c", "app"]); // T-12.5
   });
 
   it("stops the client path at a queue: consumers behind it add no latency", () => {
@@ -619,6 +620,7 @@ describe("simulate — latency path", () => {
     expect(frames[0].p95Ms).toBe(0);
     expect(frames[0].servedRps).toBe(0);
     expect(frames[0].errorRate).toBe(0);
+    expect(frames[0].p95ByNode).toBeUndefined(); // T-12.5
   });
 });
 
@@ -1242,5 +1244,82 @@ describe("simulate — event log around breakers (T-12.2)", () => {
       [117, "app → dep breaker closed at 11.6s — traffic restored"],
       [117, "dep recovered"],
     ]);
+  });
+});
+
+describe("simulate — p95 breakdown (T-12.5)", () => {
+  /** Euler split: mean part + 2σ × variance part / Σ variance parts. */
+  const expected = (mean: Record<string, number>, variance: Record<string, number>) => {
+    const v = Object.values(variance).reduce((a, b) => a + b, 0);
+    const tail = 2 * Math.sqrt(v);
+    return Object.fromEntries(
+      Object.keys(mean).map((k) => [k, mean[k] + (tail * variance[k]) / v]),
+    );
+  };
+  const sum = (by: Record<string, number> | undefined) =>
+    Object.values(by ?? {}).reduce((a, b) => a + b, 0);
+
+  it("sequential calls: each hop gets its mean plus its share of the tail", () => {
+    const g = graph(
+      [node("c", "client"), node("app"), node("cache", "cache"), node("db", "db_sql")],
+      [edge("c", "app"), edge("app", "cache"), edge("app", "db")],
+    );
+    const [f] = simulate(g, scenario({ durationSec: 0.1, readRatio: 1 }));
+    const appMs = 16;
+    const cacheMs = 1 / (1 - 0.02);
+    const dbMs = 5 / (1 - 2000 / 30000);
+    const want = expected(
+      { c: 1, app: appMs, cache: cacheMs, db: dbMs },
+      { c: 1, app: appMs ** 2, cache: cacheMs ** 2, db: dbMs ** 2 },
+    );
+    expect(Object.keys(f.p95ByNode!)).toEqual(["c", "app", "cache", "db"]);
+    for (const [k, ms] of Object.entries(want)) {
+      expect(f.p95ByNode![k]).toBeCloseTo(ms, 2);
+    } // ≈ c 1.12, app 46.24, cache 1.14, db 8.75
+    expect(sum(f.p95ByNode)).toBeCloseTo(f.p95Ms, 1);
+  });
+
+  it("an LB mixture charges branch spread to the branch: the slow backend drives the tail", () => {
+    const g = graph(
+      [node("c", "client"), node("lb", "lb"), node("a1", "app_server", { replicas: 1 }), node("a2", "app_server", { replicas: 3 })],
+      [edge("c", "lb"), edge("lb", "a1", { trafficShare: 0.5 }), edge("lb", "a2", { trafficShare: 0.5 })],
+    );
+    const [f] = simulate(g, scenario({ durationSec: 0.1, baseRps: 4000, readRatio: 0 }));
+    const lbMs = 1 / (1 - 0.04);
+    const a1 = 16;
+    const a2 = 9.6;
+    const mix = 0.5 * a1 + 0.5 * a2; // 12.8
+    const want = expected(
+      { c: 1, lb: lbMs, a1: 0.5 * a1, a2: 0.5 * a2 },
+      {
+        c: 1,
+        lb: lbMs ** 2,
+        a1: 0.5 * a1 ** 2 + 0.5 * (a1 - mix) ** 2,
+        a2: 0.5 * a2 ** 2 + 0.5 * (a2 - mix) ** 2,
+      },
+    );
+    for (const [k, ms] of Object.entries(want)) {
+      expect(f.p95ByNode![k]).toBeCloseTo(ms, 2);
+    } // ≈ 1.15 / 1.20 / 27.50 / 12.30
+    expect(f.p95ByNode!.a1).toBeGreaterThan(f.p95ByNode!.a2);
+  });
+
+  it("sums to p95Ms on every frame of the retry storm, with and without a breaker", () => {
+    const { graph: g, scenario: s, rules, retryEdgeId, triggerEndSec } =
+      retryStormFixture();
+    const run = { ...s, durationSec: triggerEndSec + 10 };
+    const guarded = {
+      ...g,
+      edges: g.edges.map((e) =>
+        e.id === retryEdgeId ? { ...e, breaker: DEFAULT_BREAKER } : e,
+      ),
+    };
+    for (const design of [g, guarded]) {
+      for (const f of simulate(design, run, rules())) {
+        expect(Math.abs(sum(f.p95ByNode) - f.p95Ms)).toBeLessThanOrEqual(
+          0.005 * g.nodes.length + 1e-6,
+        );
+      }
+    }
   });
 });
