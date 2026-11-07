@@ -104,6 +104,19 @@ describe("design-store", () => {
     expect(useDesignStore.getState().graph.entryNodeId).toBe(clientId);
   });
 
+  it("clearSelection empties node and edge selection and keeps the graph (T-12.8)", () => {
+    useDesignStore.setState({
+      selectedNodeIds: ["n-app"],
+      selectedEdgeIds: ["e-client-lb"],
+    });
+    const graph = useDesignStore.getState().graph;
+    useDesignStore.getState().clearSelection();
+    const s = useDesignStore.getState();
+    expect(s.selectedNodeIds).toEqual([]);
+    expect(s.selectedEdgeIds).toEqual([]);
+    expect(s.graph).toBe(graph);
+  });
+
   it("addNode creates a node with registry defaults", () => {
     const id = useDesignStore.getState().addNode("cache", { x: 10, y: 20 });
     expect(id).toBeTruthy();

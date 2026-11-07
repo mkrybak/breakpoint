@@ -9,6 +9,7 @@ import { ReplayScrubber } from "@/components/hud/ReplayScrubber";
 import { Verdict } from "@/components/hud/Verdict";
 import { SmallScreenNotice } from "@/components/layout/SmallScreenNotice";
 import { Palette } from "@/components/palette/Palette";
+import { DesignFileMenu } from "@/components/panels/DesignFileMenu";
 import { NodeConfigPanel } from "@/components/panels/NodeConfigPanel";
 import { ChallengeCard } from "@/components/quick/ChallengeCard";
 import { BreakItMenu, ScenarioMenu } from "@/components/quick/QuickMenus";
@@ -36,6 +37,7 @@ export function QuickWorkspace({ designId }: { designId: string }) {
         <main className="flex min-w-0 flex-1 flex-col">
           <MetricsBar
             variant="simple"
+            menu={<DesignFileMenu />}
             controls={
               <>
                 <ScenarioMenu />
@@ -43,14 +45,17 @@ export function QuickWorkspace({ designId }: { designId: string }) {
               </>
             }
           />
-          <div className="relative min-h-0 flex-1">
-            <DesignCanvas designId={designId} lockable={false} />
-            <div className="pointer-events-none absolute inset-x-0 top-3 z-10 flex justify-center">
-              <Verdict variant="plain" />
+          <div className="flex min-h-0 flex-1">
+            <div className="relative min-w-0 flex-1">
+              <DesignCanvas designId={designId} lockable={false} />
+              <div className="pointer-events-none absolute inset-x-0 top-3 z-10 flex justify-center">
+                <Verdict variant="plain" />
+              </div>
+              <div className="pointer-events-none absolute inset-x-0 bottom-3 z-10 flex justify-center">
+                <ReplayScrubber />
+              </div>
             </div>
-            <div className="pointer-events-none absolute inset-x-0 bottom-3 z-10 flex justify-center">
-              <ReplayScrubber />
-            </div>
+            <NodeConfigPanel />
           </div>
         </main>
         <aside className="flex w-72 shrink-0 flex-col border-l border-neutral-800 bg-neutral-950">
@@ -61,7 +66,6 @@ export function QuickWorkspace({ designId }: { designId: string }) {
           </div>
           <EventLog />
         </aside>
-        <NodeConfigPanel designId={designId} />
       </div>
     </div>
   );

@@ -90,13 +90,17 @@ type RunControls = ReturnType<typeof useRunControls>;
 export function MetricsBar({
   variant = "full",
   controls,
+  menu,
 }: {
   variant?: HudVariant;
   /** simple only: extra controls after Run (Quick's menus) */
   controls?: ReactNode;
+  /** both variants: trailing menu at the bar's right end (the ⋯ design-file menu, T-12.8) */
+  menu?: ReactNode;
 } = {}) {
   const rc = useRunControls();
-  if (variant === "simple") return <SimpleBar controls={controls} {...rc} />;
+  if (variant === "simple")
+    return <SimpleBar controls={controls} menu={menu} {...rc} />;
   const {
     status,
     agg,
@@ -188,6 +192,11 @@ export function MetricsBar({
           }
         />
       </div>
+      {menu && (
+        <div className="flex items-center border-l border-neutral-800 pl-3">
+          {menu}
+        </div>
+      )}
     </div>
   );
 }
@@ -200,6 +209,7 @@ const NEUTRAL_LG =
 /** Quick mode's HUD: a dominant Run button, optional menus, and three numbers (four with a queue). */
 function SimpleBar({
   controls,
+  menu,
   status,
   agg,
   runGraph,
@@ -210,7 +220,7 @@ function SimpleBar({
   resume,
   stop,
   hasEntry,
-}: RunControls & { controls?: ReactNode }) {
+}: RunControls & { controls?: ReactNode; menu?: ReactNode }) {
   const live = status !== "idle";
 
   return (
@@ -283,6 +293,11 @@ function SimpleBar({
           />
         )}
       </div>
+      {menu && (
+        <div className="flex items-center border-l border-neutral-800 pl-3">
+          {menu}
+        </div>
+      )}
     </div>
   );
 }

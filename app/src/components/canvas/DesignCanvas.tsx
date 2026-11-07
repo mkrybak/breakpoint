@@ -9,11 +9,13 @@ import {
   useReactFlow,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { useCallback, useMemo, type DragEvent } from "react";
+import { useCallback, useMemo, useState, type DragEvent } from "react";
+import { FileUp } from "lucide-react";
 import { PALETTE_DND_TYPE } from "@/components/palette/Palette";
 import type { ComponentKind } from "@/lib/core";
 import { COMPONENT_KINDS } from "@/lib/registry";
 import { validateGraph } from "@/lib/validation";
+import { importDesignFile } from "@/stores/design-file-store";
 import { useDesignStore } from "@/stores/design-store";
 import { isCanvasLocked, usePhaseStore } from "@/stores/phase-store";
 import {
@@ -30,6 +32,10 @@ const edgeTypes = { flow: FlowEdge };
 function isComponentKind(value: string): value is ComponentKind {
   return (COMPONENT_KINDS as string[]).includes(value);
 }
+
+/** an OS file drag (design file import, T-12.8), not a palette drag */
+const hasFiles = (e: DragEvent<HTMLDivElement>) =>
+  e.dataTransfer.types.includes("Files");
 
 function CanvasInner({
   designId,
@@ -56,9 +62,16 @@ function CanvasInner({
   );
 
   const warnings = useMemo(() => validateGraph(graph), [graph]);
+  const [fileOver, setFileOver] = useState(false);
 
   const onDragOver = useCallback(
     (event: DragEvent<HTMLDivElement>) => {
+      if (hasFiles(event)) {
+        event.preventDefault();
+        event.dataTransfer.dropEffect = "copy";
+        setFileOver(true);
+        return;
+      }
       if (locked) return;
       if (!event.dataTransfer.types.includes(PALETTE_DND_TYPE)) return;
       event.preventDefault();
@@ -69,6 +82,14 @@ function CanvasInner({
 
   const onDrop = useCallback(
     (event: DragEvent<HTMLDivElement>) => {
+      // a dropped design file imports even while the canvas is locked, like the old Import button
+      const file = event.dataTransfer.files[0];
+      if (file) {
+        event.preventDefault();
+        setFileOver(false);
+        void importDesignFile(file);
+        return;
+      }
       if (locked) return;
       const kind = event.dataTransfer.getData(PALETTE_DND_TYPE);
       if (!isComponentKind(kind)) return;
@@ -81,8 +102,13 @@ function CanvasInner({
     [addNode, screenToFlowPosition, locked],
   );
 
+  const onDragLeave = useCallback((event: DragEvent<HTMLDivElement>) => {
+    if (!event.currentTarget.contains(event.relatedTarget as Node | null))
+      setFileOver(false);
+  }, []);
+
   return (
-    <div className="h-full" aria-label={`Design ${designId}`}>
+    <div className="relative h-full" aria-label={`Design ${designId}`}>
       <ReactFlow<ComponentFlowNode, ComponentFlowEdge>
         nodes={nodes}
         edges={edges}
@@ -91,6 +117,7 @@ function CanvasInner({
         onConnect={locked ? undefined : onConnect}
         onDragOver={onDragOver}
         onDrop={onDrop}
+        onDragLeave={onDragLeave}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         nodesDraggable={!locked}
@@ -131,6 +158,14 @@ function CanvasInner({
           </Panel>
         )}
       </ReactFlow>
+      {fileOver && (
+        <div className="pointer-events-none absolute inset-2 z-20 flex items-center justify-center rounded-xl border-2 border-dashed border-sky-500 bg-sky-500/10">
+          <span className="flex items-center gap-2 rounded-lg bg-neutral-900/90 px-3 py-2 text-sm font-medium text-sky-200">
+            <FileUp className="h-4 w-4" /> Drop to replace this design with
+            the file
+          </span>
+        </div>
+      )}
     </div>
   );
 }

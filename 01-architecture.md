@@ -84,7 +84,7 @@ app/
 │   │   ├── quick/
 │   │   │   ├── QuickWorkspace.tsx     # Quick layout: canvas, big Run, simple HUD, right column
 │   │   │   ├── QuickMenus.tsx         # "More scenarios" + "Break it"
-│   │   │   ├── MenuButton.tsx         # dependency-free disclosure menu
+│   │   │   ├── MenuButton.tsx         # dependency-free disclosure menu (also icon-only, right-aligned)
 │   │   │   ├── quick-actions.ts       # switchQuickScenario / leaveQuickMode (store lifecycle)
 │   │   │   ├── starter.ts             # starter DesignGraph + default name
 │   │   │   ├── ChallengeCard.tsx      # next-challenge nudge + full list
@@ -96,6 +96,8 @@ app/
 │   │   │   ├── nodes/GroupNode.tsx      # region/AZ containers
 │   │   │   └── edges/FlowEdge.tsx       # animated traffic edge
 │   │   ├── palette/Palette.tsx        # drag source, driven by registry
+│   │   ├── panels/NodeConfigPanel.tsx    # selection inspector (node / edge); hidden with nothing selected
+│   │   ├── panels/DesignFileMenu.tsx     # "⋯" metrics-bar menu: Export / Import JSON
 │   │   ├── panels/RequirementsPanel.tsx  # NFR inputs: RPS, p95, consistency, error budget
 │   │   ├── panels/ScenarioPanel.tsx      # pick scenario, run/pause, chaos buttons
 │   │   ├── panels/chaos-actions.ts       # chaos list shared by ScenarioPanel and "Break it"
@@ -132,6 +134,7 @@ app/
 │   │   └── challenges.ts         # Quick challenge solved state (bp:challenges:solved)
 │   └── stores/
 │       ├── design-store.ts       # zustand: graph, selection
+│       ├── design-file-store.ts  # export/import of the attached design + import error
 │       ├── scenario-store.ts     # zustand: selected preset + edited NFRs
 │       └── sim-store.ts          # zustand: run state, frames, log
 ├── tests/

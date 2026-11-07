@@ -40,6 +40,10 @@ test("landing → design → run → live state change → verdict", async ({
   await expect(
     page.getByText("App fleet", { exact: true }).first(),
   ).toBeVisible();
+  await expect(page.getByRole("button", { name: "Design file" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Export JSON" })).toHaveCount(
+    0,
+  );
 
   await page.getByRole("button", { name: "Run", exact: true }).click();
 

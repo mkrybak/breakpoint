@@ -101,6 +101,8 @@ interface DesignStore {
     value: number | string | boolean,
   ) => void;
   renameNode: (id: string, label: string) => void;
+  /** Inspector close button (T-12.8): deselect every node and edge. */
+  clearSelection: () => void;
   /** Phase notes panel (T-4.2): set the markdown note for one phase. */
   setPhaseNote: (phase: Phase, md: string) => void;
   /** Append a fully-stamped action event to the log. */
@@ -329,6 +331,8 @@ export const useDesignStore = create<DesignStore>((set) => ({
         nodes: s.graph.nodes.map((n) => (n.id === id ? { ...n, label } : n)),
       },
     })),
+
+  clearSelection: () => set({ selectedNodeIds: [], selectedEdgeIds: [] }),
 
   setPhaseNote: (phase, md) =>
     set((s) => ({ phaseNotes: { ...s.phaseNotes, [phase]: md } })),

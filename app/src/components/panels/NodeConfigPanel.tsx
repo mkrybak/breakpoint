@@ -1,31 +1,18 @@
 "use client";
 
-import { useRef, useState, type ChangeEvent } from "react";
+import { X } from "lucide-react";
 import type { ConfigField, DesignNode } from "@/lib/core";
 import { getComponentDef } from "@/lib/registry";
-import {
-  buildDesignRecord,
-  exportDesignFile,
-  parseDesignRecord,
-} from "@/persistence/local";
 import { useDesignStore } from "@/stores/design-store";
 import { EdgeInspector } from "./EdgeInspector";
 import { FIELD_LABEL, INPUT } from "./styles";
 
-const BUTTON =
-  "rounded-lg border border-neutral-800 bg-neutral-900 px-2.5 py-1.5 text-xs font-medium text-neutral-200 hover:border-neutral-600";
-
-export function NodeConfigPanel({ designId }: { designId: string }) {
-  const importRecord = useDesignStore((s) => s.importRecord);
+/** Selection inspector (T-12.8): renders only while one node or one edge is selected. */
+export function NodeConfigPanel() {
   const graph = useDesignStore((s) => s.graph);
-  const designName = useDesignStore((s) => s.designName);
-  const designMode = useDesignStore((s) => s.designMode);
-  const phaseNotes = useDesignStore((s) => s.phaseNotes);
-  const actionLog = useDesignStore((s) => s.actionLog);
   const selectedNodeIds = useDesignStore((s) => s.selectedNodeIds);
   const selectedEdgeIds = useDesignStore((s) => s.selectedEdgeIds);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const [importError, setImportError] = useState<string | null>(null);
+  const clearSelection = useDesignStore((s) => s.clearSelection);
 
   const selected =
     selectedNodeIds.length === 1
@@ -36,78 +23,31 @@ export function NodeConfigPanel({ designId }: { designId: string }) {
       ? graph.edges.find((e) => e.id === selectedEdgeIds[0])
       : undefined;
 
-  const onExport = () =>
-    exportDesignFile(
-      buildDesignRecord(
-        designId,
-        designName,
-        graph,
-        designMode,
-        phaseNotes,
-        actionLog,
-      ),
-    );
-
-  const onImportFile = async (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    event.target.value = ""; // allow re-importing the same file
-    if (!file) return;
-    const record = parseDesignRecord(await file.text());
-    if (record === null) {
-      setImportError("Not a valid design file");
-      return;
-    }
-    setImportError(null);
-    // keeps the current design's mode; the file's mode is ignored (T-7.2)
-    importRecord(record);
-  };
+  if (!selected && !selectedEdge) return null;
 
   return (
-    <aside className="w-64 shrink-0 overflow-y-auto border-l border-neutral-800 bg-neutral-950 p-3">
-      <h2 className="text-xs font-semibold tracking-wide text-neutral-400 uppercase">
-        Design
-      </h2>
-      <div className="mt-2 flex gap-2">
-        <button type="button" onClick={onExport} className={BUTTON}>
-          Export JSON
-        </button>
+    <aside
+      aria-label={selected ? "Node settings" : "Edge settings"}
+      className="w-64 shrink-0 overflow-y-auto border-l border-neutral-800 bg-neutral-950 p-3"
+    >
+      <div className="flex items-center justify-between">
+        <h2 className="text-xs font-semibold tracking-wide text-neutral-400 uppercase">
+          {selected ? "Node" : "Edge"}
+        </h2>
         <button
           type="button"
-          onClick={() => fileInputRef.current?.click()}
-          className={BUTTON}
+          onClick={clearSelection}
+          aria-label="Close inspector"
+          title="Close (deselects)"
+          className="-my-1.5 -mr-1.5 flex h-8 w-8 items-center justify-center rounded-md text-neutral-500 transition-colors duration-150 hover:bg-neutral-800 hover:text-neutral-200 focus-visible:outline-2 focus-visible:outline-sky-300"
         >
-          Import JSON
+          <X className="h-3.5 w-3.5" />
         </button>
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="application/json,.json"
-          className="hidden"
-          onChange={(event) => void onImportFile(event)}
-        />
       </div>
-      {importError !== null && (
-        <p className="mt-2 text-xs text-red-400">{importError}</p>
-      )}
-
-      <h2 className="mt-6 text-xs font-semibold tracking-wide text-neutral-400 uppercase">
-        Node
-      </h2>
       {selected ? (
         <NodeForm node={selected} />
       ) : (
-        <p className="mt-2 text-xs text-neutral-500">
-          Select a node to configure it.
-        </p>
-      )}
-
-      {selectedEdge && (
-        <>
-          <h2 className="mt-6 text-xs font-semibold tracking-wide text-neutral-400 uppercase">
-            Edge
-          </h2>
-          <EdgeInspector edge={selectedEdge} />
-        </>
+        selectedEdge && <EdgeInspector edge={selectedEdge} />
       )}
     </aside>
   );
