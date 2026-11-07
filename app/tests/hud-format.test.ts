@@ -70,6 +70,17 @@ describe("classifyLogSeverity", () => {
   it("flags recovered as recovered", () => {
     expect(classifyLogSeverity("Postgres recovered")).toBe("recovered");
   });
+  it("classifies breaker lines: open warns, closed recovers, half-open is info (T-8.6)", () => {
+    expect(
+      classifyLogSeverity("App → DB breaker open at 100% errors — failing fast"),
+    ).toBe("warning");
+    expect(
+      classifyLogSeverity("App → DB breaker closed — traffic restored"),
+    ).toBe("recovered");
+    expect(classifyLogSeverity("App → DB breaker half-open — probing")).toBe(
+      "info",
+    );
+  });
   it("defaults to info", () => {
     expect(classifyLogSeverity("Simulation started")).toBe("info");
   });

@@ -1,4 +1,6 @@
 export type {
+  BreakerPhase,
+  EdgeBreaker,
   EdgeFrame,
   NodeFrame,
   NodeState,

@@ -4,6 +4,7 @@ import type {
   DesignEdge,
   DesignGraph,
   DesignNode,
+  EdgeBreaker,
   Phase,
   RunResult,
   Scenario,
@@ -269,6 +270,7 @@ function parseEdge(
     callsPerRequest,
     timeoutMs,
     retries,
+    breaker,
   } = value;
   if (typeof id !== "string" || typeof source !== "string" || typeof target !== "string") return null;
   if (kind !== "sync" && kind !== "async") return null;
@@ -277,10 +279,21 @@ function parseEdge(
   if (autoShare !== undefined && typeof autoShare !== "boolean") return null;
   if (timeoutMs !== undefined && !isFiniteNumber(timeoutMs)) return null;
   if (retries !== undefined && !isFiniteNumber(retries)) return null;
+  if (breaker !== undefined && !isValidBreaker(breaker)) return null;
   // T-8.5: range sanitizing is the engine's job; kept but ignored on async edges
   const resilience = {
     ...(timeoutMs !== undefined ? { timeoutMs } : {}),
     ...(retries !== undefined ? { retries } : {}),
+    // T-8.6: rebuilt from its three fields; the engine clamps
+    ...(breaker !== undefined
+      ? {
+          breaker: {
+            errorThreshold: breaker.errorThreshold,
+            tripAfterSec: breaker.tripAfterSec,
+            cooldownSec: breaker.cooldownSec,
+          },
+        }
+      : {}),
   };
   // TS doesn't narrow `unknown` through the negated literal check above
   const base = { id, source, target, kind: kind as DesignEdge["kind"] };
@@ -298,6 +311,15 @@ function parseEdge(
     ...(calls !== undefined ? { callsPerRequest: calls } : {}),
     ...resilience,
   };
+}
+
+function isValidBreaker(value: unknown): value is EdgeBreaker {
+  return (
+    isRecord(value) &&
+    isFiniteNumber(value.errorThreshold) &&
+    isFiniteNumber(value.tripAfterSec) &&
+    isFiniteNumber(value.cooldownSec)
+  );
 }
 
 /** kind is only checked to be a string — the ActionKind union is M4's concern. */

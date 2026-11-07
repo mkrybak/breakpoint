@@ -64,6 +64,20 @@ describe("buildEdgePolicies", () => {
     };
     expect([...buildEdgePolicies(graph)]).toEqual([["c-q", { retries: 1 }]]);
   });
+
+  it("gives a breaker-only edge a zero-retry policy so it reports failRate (T-8.6)", () => {
+    const breaker = { errorThreshold: 0.5, tripAfterSec: 0.5, cooldownSec: 5 };
+    const graph: DesignGraph = {
+      nodes: [node("c", "client"), node("a", "app_server"), node("q", "queue"), node("w", "worker")],
+      edges: [
+        edge({ id: "c-a", source: "c", target: "a", breaker }),
+        edge({ id: "a-q", source: "a", target: "q", kind: "async", breaker }),
+        edge({ id: "q-w", source: "q", target: "w", breaker }),
+      ],
+      entryNodeId: "c",
+    };
+    expect([...buildEdgePolicies(graph)]).toEqual([["c-a", { retries: 0 }]]);
+  });
 });
 
 describe("stepEdge", () => {
@@ -101,6 +115,33 @@ describe("stepEdge", () => {
     expect(step.failRate).toBe(1);
     expect(step.rejectedRps).toBe(0);
     expect(step.exhaustedRps).toBe(0);
+  });
+
+  it("a breaker's admit scales the carry: rejected calls schedule no retry (T-8.6)", () => {
+    const step = stepEdge(
+      { retries: 2 },
+      {
+        retryCarry: [
+          { read: 1000, write: 0 },
+          { read: 0, write: 0 },
+        ],
+      },
+      {
+        fresh: { read: 400, write: 0 },
+        dead: false,
+        rejectFraction: 0.5,
+        targetPathMs: 0,
+        admit: 0.1,
+      },
+    );
+    expect(step.retryRps).toBe(100);
+    // level 2 is built from the 100 admitted retries, not the 1000 carried
+    expect(step.next.retryCarry).toEqual([
+      { read: 200, write: 0 },
+      { read: 50, write: 0 },
+    ]);
+    expect(step.exhaustedRps).toBe(0);
+    expect(step.rejectedRps).toBe(250);
   });
 
   it("with retries 0 every failure is exhausted", () => {

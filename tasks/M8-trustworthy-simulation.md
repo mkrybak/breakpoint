@@ -50,7 +50,8 @@ Every task updates [[03-simulation-engine]] (spec + Decisions) and adds or adjus
 **Accept:** Sync edges get optional `timeoutMs` and `retries`. Requests that drop or exceed the timeout at the target count as failed, and each retry re-offers load to the target next tick. Golden test, retry storm: a dependency briefly saturates, retries ×3 amplify the load, and it stays overloaded after the trigger ends. Without retries it recovers.
 
 ### T-8.6 — Circuit breaker
-- [ ] T-8.6 done
+- [x] T-8.6 done
+  - Also: breakers only on edges that support resilience (not queue → consumer); group headings (`GROUP_HEADING`) split Resilience / Circuit breaker in the Edge panel; checkbox reads "Enabled" under the "Circuit breaker" heading; a live phase line in the panel; number fields clamp on blur/Enter, not per keystroke (lead review).
 
 **Files:** same area as T-8.5
 **Accept:** An optional per-edge breaker: it opens when the target's error rate passes a threshold for N ticks, fails fast (no load on the target, errors at the caller) while open, then half-opens after a cooldown. Event log lines for open, half-open and closed. Golden test: the T-8.5 retry storm recovers with the breaker on.
@@ -79,3 +80,6 @@ Every task updates [[03-simulation-engine]] (spec + Decisions) and adds or adjus
 - 2026-11-06 (T-8.4, lead call): an LB split averages over its *live* backends (denominator = live split flow, not served(lb)), so a partitioned backend no longer halves p95 (11.77 → 20.30 ms); calls are sequential (no parallel fan-out max).
 - T-8.5: timeout = exponential tail fraction exp(−t/pathMs(target)); tail-drop attribution; only exhausted attempts are errors; edge fields live in the right panel's Edge section (not the canvas popover); files beyond the list: core/sim-result, edge-state.ts (new), persistence, flow-adapter, design-store, panels/styles.ts, examples retry-storm + dependency-blip.
 - 2026-11-06 (T-8.5, lead call): timeout failure is the exponential tail fraction exp(−t/pathMs) rather than an all-or-nothing cliff; timed-out work still loads the target; only exhausted attempts count as client errors; retries go to the same backend next tick, no backoff.
+- T-8.6: breaker trips on the edge's call failure rate (incl. timeouts), half-open = one tick at 10% probe; inspector = checkbox + 3 exposed fields (50% · 0.5 s · 5 s); new files simulation/breaker.ts, panels/BreakerControls.tsx; toggles recorded for the grader.
+- 2026-11-07 (T-8.6, lead call): the breaker trips on the edge's own call failure rate (drops + timeouts, over admitted calls), strictly above the threshold for N ticks; half-open is one tick that lets 10% of calls through as a probe; defaults are 50% · 0.5 s · 5 s; rejected calls schedule no retries; an LB edge's breaker rejects its own share without rerouting.
+- 2026-11-07 (T-8.6, lead review): edge-panel number fields keep a draft while you type and clamp on blur/Enter (per-keystroke clamping made "30" or "0.5" untypeable).

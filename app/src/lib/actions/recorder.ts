@@ -49,7 +49,8 @@ function changedConfigKeys(
 
 /**
  * Diff two design graphs into the ordered candidate actions between them:
- * node adds, node removes, renames, config changes, edge adds, edge removes.
+ * node adds, node removes, renames, config changes, edge adds, edge removes,
+ * breaker toggles (T-8.6; breaker field edits record nothing).
  * Position and selection changes produce nothing — they are not graph fields —
  * so dragging a node or clicking it records no events.
  */
@@ -102,6 +103,19 @@ export function diffGraph(prev: DesignGraph, next: DesignGraph): DraftAction[] {
         detail: `disconnected ${endpointLabels(edge, prevNodes)}`,
       });
     }
+  }
+  for (const edge of next.edges) {
+    const before = prevEdges.get(edge.id);
+    if (
+      !before ||
+      (before.breaker === undefined) === (edge.breaker === undefined)
+    ) {
+      continue;
+    }
+    drafts.push({
+      kind: "config_changed",
+      detail: `${edge.breaker ? "enabled" : "disabled"} circuit breaker on ${endpointLabels(edge, nextNodes)}`,
+    });
   }
   return drafts;
 }

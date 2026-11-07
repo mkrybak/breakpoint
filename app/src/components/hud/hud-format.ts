@@ -33,8 +33,8 @@ export type LogSeverity = "critical" | "warning" | "recovered" | "info";
  */
 export function classifyLogSeverity(message: string): LogSeverity {
   if (/overloaded|shedding load| down$/.test(message)) return "critical";
-  if (/saturated|running hot/.test(message)) return "warning";
-  if (/recovered/.test(message)) return "recovered";
+  if (/saturated|running hot|breaker open/.test(message)) return "warning";
+  if (/recovered|breaker closed/.test(message)) return "recovered";
   return "info";
 }
 

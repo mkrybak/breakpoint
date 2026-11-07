@@ -9,6 +9,16 @@ export interface DesignNode {
   config: Record<string, number | string | boolean>;
 }
 
+/** T-8.6: per-edge circuit breaker (sync edges only; ignored on async). */
+export interface EdgeBreaker {
+  /** 0–1: trips when this edge's call failure rate is strictly above it */
+  errorThreshold: number;
+  /** consecutive seconds over the threshold before it opens */
+  tripAfterSec: number;
+  /** seconds it stays open (fail fast) before a half-open probe */
+  cooldownSec: number;
+}
+
 export interface DesignEdge {
   id: string;
   source: string;
@@ -33,6 +43,8 @@ export interface DesignEdge {
   timeoutMs?: number;
   /** T-8.5, sync call edges only: extra attempts after a failure (0–5); absent = 0. */
   retries?: number;
+  /** optional circuit breaker; absent = none (T-8.6) */
+  breaker?: EdgeBreaker;
 }
 
 export interface DesignGraph {

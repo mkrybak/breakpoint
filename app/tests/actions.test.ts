@@ -70,6 +70,23 @@ describe("diffGraph", () => {
     ]);
   });
 
+  it("records breaker toggles but not breaker field edits (T-8.6)", () => {
+    const nodes = [node("a", "A"), node("b", "B")];
+    const plain = graph(nodes, [edge("e", "a", "b")]);
+    const breaker = { errorThreshold: 0.5, tripAfterSec: 0.5, cooldownSec: 5 };
+    const guarded = graph(nodes, [{ ...edge("e", "a", "b"), breaker }]);
+    expect(diffGraph(plain, guarded)).toEqual([
+      { kind: "config_changed", detail: "enabled circuit breaker on A → B" },
+    ]);
+    expect(diffGraph(guarded, plain)).toEqual([
+      { kind: "config_changed", detail: "disabled circuit breaker on A → B" },
+    ]);
+    const retuned = graph(nodes, [
+      { ...edge("e", "a", "b"), breaker: { ...breaker, cooldownSec: 10 } },
+    ]);
+    expect(diffGraph(guarded, retuned)).toEqual([]);
+  });
+
   it("ignores position-only changes", () => {
     const before = graph([node("a", "App server")]);
     const after = graph([

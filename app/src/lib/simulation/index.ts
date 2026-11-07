@@ -1,4 +1,6 @@
 export type {
+  BreakerPhase,
+  EdgeBreaker,
   EdgeFrame,
   NodeFrame,
   NodeState,
@@ -18,6 +20,11 @@ export {
   MAX_TIMEOUT_MS,
   edgeSupportsResilience,
 } from "./edge-state";
+export {
+  BREAKER_LIMITS,
+  BREAKER_PROBE_FRACTION,
+  DEFAULT_BREAKER,
+} from "./breaker";
 export { compileRules, createRuleEngine } from "./rules";
 export type { RuleEngine } from "./rules";
 export { evaluateVerdict } from "./verdict";

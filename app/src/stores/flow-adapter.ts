@@ -1,5 +1,5 @@
 import { MarkerType, type Edge, type Node } from "@xyflow/react";
-import type { ComponentKind, DesignGraph } from "@/lib/core";
+import type { ComponentKind, DesignGraph, EdgeBreaker } from "@/lib/core";
 
 export type ComponentNodeData = {
   kind: ComponentKind;
@@ -21,6 +21,8 @@ export type FlowEdgeData = {
   timeoutMs?: number;
   /** T-8.5, sync call edges: extra attempts after a failure; absent = 0. */
   retries?: number;
+  /** T-8.6, sync edges: optional circuit breaker; absent = none. */
+  breaker?: EdgeBreaker;
   /** Source node's kind — sourceKind lets FlowEdge pick split vs call without a store lookup. */
   sourceKind?: ComponentKind;
 };
@@ -67,6 +69,7 @@ export function toFlow(
         callsPerRequest: e.callsPerRequest,
         timeoutMs: e.timeoutMs,
         retries: e.retries,
+        breaker: e.breaker,
         sourceKind: kindById.get(e.source),
       },
     })),
@@ -107,6 +110,7 @@ export function fromFlow(
           ? { timeoutMs: e.data.timeoutMs }
           : {}),
         ...(e.data?.retries !== undefined ? { retries: e.data.retries } : {}),
+        ...(e.data?.breaker !== undefined ? { breaker: e.data.breaker } : {}),
       })),
     entryNodeId: resolveEntryNodeId(nodes, previousEntryNodeId),
   };

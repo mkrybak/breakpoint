@@ -17,6 +17,7 @@ import {
   zeroFlow,
   type ApplyRulesFn,
 } from "../src/lib/simulation/engine";
+import { DEFAULT_BREAKER } from "../src/lib/simulation/breaker";
 import { compileRules } from "../src/lib/simulation/rules";
 
 function node(
@@ -33,7 +34,12 @@ function edge(
   overrides: Partial<
     Pick<
       DesignEdge,
-      "trafficShare" | "callsPerRequest" | "kind" | "timeoutMs" | "retries"
+      | "trafficShare"
+      | "callsPerRequest"
+      | "kind"
+      | "timeoutMs"
+      | "retries"
+      | "breaker"
     >
   > = {},
 ): DesignEdge {
@@ -881,23 +887,39 @@ describe("simulate — timeouts and retries (T-8.5)", () => {
   });
 });
 
-describe("simulate — golden: retry storm (T-8.5)", () => {
-  const storm = (policy: Partial<Pick<DesignEdge, "timeoutMs" | "retries">>) =>
-    graph(
-      [
-        node("c", "client"),
-        node("app", "app_server", { replicas: 4 }),
-        node("dep"),
-      ],
-      [edge("c", "app"), edge("app", "dep", { timeoutMs: 200, ...policy })],
-    );
+const storm = (policy: Partial<Pick<DesignEdge, "timeoutMs" | "retries">>) =>
+  graph(
+    [
+      node("c", "client"),
+      node("app", "app_server", { replicas: 4 }),
+      node("dep"),
+    ],
+    [edge("c", "app"), edge("app", "dep", { timeoutMs: 200, ...policy })],
+  );
+
+/** T-8.5's retry storm, shared with T-8.6's breaker golden. */
+function retryStormFixture() {
   const spike: ApplyRulesFn = (t, s) => ({
     offeredRps: t >= 10 && t < 20 ? s.baseRps * 2 : s.baseRps,
   });
-  const sc = scenario({ durationSec: 6, baseRps: 3000, readRatio: 1 });
+  return {
+    graph: storm({ retries: 3 }),
+    scenario: scenario({ durationSec: 6, baseRps: 3000, readRatio: 1 }),
+    rules: (): ApplyRulesFn => spike,
+    dependencyId: "dep",
+    retryEdgeId: "e-app-dep",
+    /** the spike ends at tick 20 */
+    triggerEndSec: 2,
+  };
+}
+
+describe("simulate — golden: retry storm (T-8.5)", () => {
+  const { scenario: sc, rules } = retryStormFixture();
+  const spike = rules();
 
   it("retries ×3 amplify a 1 s spike into a dependency that stays overloaded", () => {
-    const frames = simulate(storm({ retries: 3 }), sc, spike);
+    const { graph: g } = retryStormFixture();
+    const frames = simulate(g, sc, spike);
     expect(frames).toHaveLength(60);
     for (const f of frames.slice(0, 10)) {
       expect(f.perNode["dep"].state).toBe("hot");
@@ -926,6 +948,139 @@ describe("simulate — golden: retry storm (T-8.5)", () => {
     for (const f of frames) {
       expect(f.perNode["dep"].state).not.toBe("overloaded");
       expect(f.errorRate).toBeLessThan(0.01);
+    }
+  });
+});
+
+describe("propagateTraffic — breaker gate (T-8.6)", () => {
+  const g = graph([node("c", "client"), node("app")], [edge("c", "app")]);
+  const offered = { read: 1000, write: 0 };
+
+  it("admits only edgePass of the flow; the rest is unroutable at the caller", () => {
+    const prop = propagateTraffic(g, offered, undefined, {
+      edgePass: { "e-c-app": 0.1 },
+    });
+    expect(prop.perEdge["e-c-app"]).toEqual({ read: 100, write: 0 });
+    expect(prop.freshPerEdge["e-c-app"]).toEqual({ read: 100, write: 0 });
+    expect(prop.unroutable.c).toEqual({ read: 900, write: 0 });
+    expect(prop.perNode.app.demand).toEqual({ read: 100, write: 0 });
+  });
+
+  it("pass 0 sends nothing to the target", () => {
+    const prop = propagateTraffic(g, offered, undefined, {
+      edgePass: { "e-c-app": 0 },
+    });
+    expect(prop.perEdge["e-c-app"]).toEqual({ read: 0, write: 0 });
+    expect(prop.unroutable.c).toEqual({ read: 1000, write: 0 });
+  });
+});
+
+describe("simulate — golden: circuit breaker (T-8.6)", () => {
+  it("opens under a dependency outage, fails fast, probes, re-opens, then closes", () => {
+    const g = graph(
+      [node("c", "client"), node("app"), node("dep")],
+      [edge("c", "app"), edge("app", "dep", { breaker: DEFAULT_BREAKER })],
+    );
+    const outage: ApplyRulesFn = (t, s) => ({
+      offeredRps: s.baseRps,
+      ...(t >= 10 && t < 80 ? { aliveFraction: { dep: 0 } } : {}),
+    });
+    const frames = simulate(
+      g,
+      scenario({ durationSec: 13, baseRps: 1000, readRatio: 1 }),
+      outage,
+    );
+    const lines = frames.flatMap((f, i) =>
+      f.events.filter((e) => e.includes("breaker")).map((e) => [i, e]),
+    );
+    expect(lines).toEqual([
+      [14, "app → dep breaker open at 100% errors — failing fast"],
+      [65, "app → dep breaker half-open — probing"],
+      [65, "app → dep breaker open at 100% errors — failing fast"],
+      [116, "app → dep breaker half-open — probing"],
+      [116, "app → dep breaker closed — traffic restored"],
+    ]);
+    const phase = (i: number) => frames[i].perEdge["e-app-dep"].breaker;
+    const rps = (i: number) => frames[i].perEdge["e-app-dep"].rps;
+    const expectPhase = (from: number, to: number, p: string) => {
+      for (let i = from; i <= to; i++) expect(phase(i)).toBe(p);
+    };
+    expectPhase(0, 14, "closed");
+    expectPhase(15, 64, "open");
+    expectPhase(65, 65, "half-open");
+    expectPhase(66, 115, "open");
+    expectPhase(116, 116, "half-open");
+    expectPhase(117, 129, "closed");
+    expect(rps(13)).toBe(1000);
+    for (let i = 15; i <= 64; i++) expect(rps(i)).toBe(0);
+    expect(rps(65)).toBe(100);
+    expect(rps(66)).toBe(0);
+    expect(rps(116)).toBe(100);
+    expect(rps(117)).toBe(1000);
+    expect(frames[40].perNode.app.dropped).toBe(1000);
+    expect(frames[40].errorRate).toBe(1);
+    expect(frames[116].errorRate).toBe(0.9);
+    for (const f of frames.slice(117)) expect(f.errorRate).toBe(0);
+  });
+
+  it("async edges ignore the breaker", () => {
+    const withBreaker = graph(
+      [node("c", "client"), node("app"), node("q", "queue")],
+      [
+        edge("c", "app"),
+        edge("app", "q", { kind: "async", breaker: DEFAULT_BREAKER }),
+      ],
+    );
+    const plain = graph(withBreaker.nodes, [
+      edge("c", "app"),
+      edge("app", "q", { kind: "async" }),
+    ]);
+    const sc = scenario({ durationSec: 0.1 });
+    const [frame] = simulate(withBreaker, sc);
+    expect("breaker" in frame.perEdge["e-app-q"]).toBe(false);
+    expect(frame.perEdge["e-app-q"].rps).toBe(
+      simulate(plain, sc)[0].perEdge["e-app-q"].rps,
+    );
+  });
+
+  it("golden: the T-8.5 retry storm recovers with the breaker on", () => {
+    const {
+      graph: g,
+      scenario: s,
+      rules,
+      dependencyId,
+      retryEdgeId,
+      triggerEndSec,
+    } = retryStormFixture();
+    const run = {
+      ...s,
+      durationSec: Math.max(s.durationSec, triggerEndSec + 10),
+    };
+    const guarded = {
+      ...g,
+      edges: g.edges.map((e) =>
+        e.id === retryEdgeId ? { ...e, breaker: DEFAULT_BREAKER } : e,
+      ),
+    };
+    const off = simulate(g, run, rules());
+    const on = simulate(guarded, run, rules());
+    expect(off.at(-1)!.perNode[dependencyId].state).toBe("overloaded"); // storm persists without it
+    const lines = on.flatMap((f) =>
+      f.events.filter((e) => e.includes("breaker")),
+    );
+    expect(lines[0]).toMatch(/breaker open at \d+% errors/);
+    expect(lines.at(-1)).toMatch(/breaker closed — traffic restored$/);
+    expect(
+      on.some(
+        (f) =>
+          f.perEdge[retryEdgeId].breaker === "open" &&
+          f.perEdge[retryEdgeId].rps === 0,
+      ),
+    ).toBe(true);
+    for (const f of on.slice(-10)) {
+      expect(f.errorRate).toBeLessThan(0.01); // T-8.5's 200 ms timeout leaves a tiny exponential tail
+      expect(["ok", "hot"]).toContain(f.perNode[dependencyId].state);
+      expect(f.perEdge[retryEdgeId].breaker).toBe("closed");
     }
   });
 });

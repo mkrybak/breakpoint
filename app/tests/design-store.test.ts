@@ -217,6 +217,17 @@ describe("design-store", () => {
     expect(edge?.retries).toBe(3);
   });
 
+  it("updateEdge sets a breaker; undefined removes the key (T-8.6)", () => {
+    const find = () =>
+      useDesignStore.getState().graph.edges.find((e) => e.id === "e-client-lb");
+    const breaker = { errorThreshold: 0.5, tripAfterSec: 0.5, cooldownSec: 5 };
+    useDesignStore.getState().updateEdge("e-client-lb", { breaker });
+    expect(find()?.breaker).toEqual(breaker);
+    useDesignStore.getState().updateEdge("e-client-lb", { breaker: undefined });
+    const edge = find();
+    expect(edge && "breaker" in edge).toBe(false);
+  });
+
   it("tracks edge selection", () => {
     useDesignStore
       .getState()

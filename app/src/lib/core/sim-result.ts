@@ -2,6 +2,8 @@ import type { DesignGraph } from "./design";
 
 export type NodeState = "ok" | "hot" | "saturated" | "overloaded" | "down";
 
+export type BreakerPhase = "closed" | "open" | "half-open";
+
 /** One node's metrics for one tick. */
 export interface NodeFrame {
   util: number;
@@ -23,6 +25,8 @@ export interface EdgeFrame {
   retryRps?: number;
   /** T-8.5, same edges only: share of this tick's attempts that failed (shed by the target or timed out) */
   failRate?: number;
+  /** phase that governed this tick's traffic; only on edges with a breaker (T-8.6) */
+  breaker?: BreakerPhase;
 }
 
 /** One per tick (100ms), streamed worker → UI. */

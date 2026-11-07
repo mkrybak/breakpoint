@@ -7,7 +7,7 @@ import {
   type EdgeProps,
 } from "@xyflow/react";
 import { edgeDashDuration, edgeWidth } from "@/components/canvas/sim-visuals";
-import { isSplitSource } from "@/lib/registry";
+import { getComponentDef, isSplitSource } from "@/lib/registry";
 import { useDesignStore } from "@/stores/design-store";
 import { useSimStore } from "@/stores/sim-store";
 import type { ComponentFlowEdge } from "@/stores/flow-adapter";
@@ -29,6 +29,8 @@ export function FlowEdge({
 }: EdgeProps<ComponentFlowEdge>) {
   const updateEdge = useDesignStore((s) => s.updateEdge);
   const rps = useSimStore((s) => s.latestFrame?.perEdge[id]?.rps ?? 0);
+  // T-8.6: same source as rps, so replay scrubbing shows the phase too
+  const breakerPhase = useSimStore((s) => s.latestFrame?.perEdge[id]?.breaker);
   const [path, labelX, labelY] = getBezierPath({
     sourceX,
     sourceY,
@@ -42,6 +44,12 @@ export function FlowEdge({
   const calls = data?.callsPerRequest ?? 1;
   const kind = data?.kind ?? "sync";
   const isAuto = isSplit && data?.autoShare !== false;
+  // breakers apply to sync calls whose source isn't a queue/stream (edgeSupportsResilience)
+  const hasBreaker =
+    kind === "sync" &&
+    data?.breaker !== undefined &&
+    data.sourceKind !== undefined &&
+    getComponentDef(data.sourceKind).category !== "async";
 
   const live = rps > 0;
   const width = live ? edgeWidth(rps) : selected ? 2 : 1.5;
@@ -55,7 +63,13 @@ export function FlowEdge({
         path={path}
         markerEnd={markerEnd}
         style={{
-          stroke: selected ? "#38bdf8" : live ? "#737373" : "#525252",
+          stroke: selected
+            ? "#38bdf8"
+            : breakerPhase === "open"
+              ? "#fb7185"
+              : live
+                ? "#737373"
+                : "#525252",
           strokeWidth: width,
           strokeDasharray: live ? "8 6" : kind === "async" ? "6 3" : undefined,
           animation: live ? `sim-flow ${dur}s linear infinite` : undefined,
@@ -153,6 +167,23 @@ export function FlowEdge({
                 : `×${Math.round(calls * 100) / 100}`}
               {isAuto ? " · auto" : ""}
               {kind === "async" ? " · async" : ""}
+              {hasBreaker && (
+                <span
+                  className={
+                    breakerPhase === "open"
+                      ? "text-rose-400"
+                      : breakerPhase === "half-open"
+                        ? "text-amber-400"
+                        : undefined
+                  }
+                >
+                  {breakerPhase === "open"
+                    ? " · breaker open"
+                    : breakerPhase === "half-open"
+                      ? " · breaker probing"
+                      : " · breaker"}
+                </span>
+              )}
             </span>
           )}
         </div>

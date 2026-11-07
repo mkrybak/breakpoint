@@ -90,6 +90,7 @@ interface DesignStore {
         | "kind"
         | "timeoutMs"
         | "retries"
+        | "breaker"
       >
     >,
   ) => void;
@@ -175,9 +176,9 @@ function withoutRecording(mutate: () => void): void {
   }
 }
 
-const CLEARABLE_EDGE_KEYS = ["timeoutMs", "retries"] as const;
+const CLEARABLE_EDGE_KEYS = ["timeoutMs", "retries", "breaker"] as const;
 
-/** Merge an updateEdge patch; an explicit undefined on a clearable key removes it (T-8.5). */
+/** Merge an updateEdge patch; an explicit undefined on a clearable key removes it (T-8.5; breaker T-8.6). */
 function applyEdgePatch(
   edge: DesignEdge,
   patch: Parameters<DesignStore["updateEdge"]>[1],

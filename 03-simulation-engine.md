@@ -12,10 +12,12 @@ Discrete-time flow simulation over the [[02-data-model|DesignGraph]]. Pure TypeS
 ```
 for each tick t:
   1. offeredRps = applyStressRules(scenario.timeline, t)   // ramp/spike modify load
+  1b. breakers (T-8.6): each sync edge with a breaker gates this tick's calls — closed 1, open 0, half-open 0.1 (one probe tick); an open breaker that finished its cooldown turns half-open first
   2. topo-sort graph from entryNode; propagate traffic along edges
      - each edge carries forwarded × edgeMultiplier: trafficShare on an lb's split edges (Σ = 1), callsPerRequest on every other (call) edge (default 1; 0.2 = 20% of requests; 3 = three calls)
      - cache nodes split traffic: hitRate stays, (1-hitRate) forwards downstream
      - async edges deliver to queues (absorb, delay), not to the sync latency path
+     - the gated-off share of an edge's calls (fresh + retries) never reaches the target: booked as unroutable at the caller (fails fast, client error), schedules no retry
   3. per node: demand = inbound + queued
      served  = min(demand, effectiveCapacity)
      queued  = clamp(demand - served, 0, maxQueue)      // maxQueue ≈ 0.5s of capacity
@@ -34,6 +36,7 @@ for each tick t:
   4b. policy edges (sync calls with timeoutMs/retries): timeouts + retry carry, see "Timeouts & retries"; retried drops leave errorRate, given-up timeouts join it.
   5. errorRate = Σ client-path dropped / offeredRps
      client share per node: entry 1, async nodes 0, else sync-carried in-flow fraction. The rest of each node's drops → asyncDroppedRps; maxLagSec = max async-node consumer lag
+  5b. breakers fold this tick's edge failure rate (failed ÷ admitted calls, T-8.5): closed → open after N consecutive ticks strictly over threshold; half-open → open if over, else closed
   6. emit SimFrame; evaluate verdict incrementally
 ```
 
@@ -73,7 +76,7 @@ Async-category kinds use `bufferModel` (`node-models.ts`) instead of the 0.5s-of
 
 ## Timeouts & retries
 
-A *policy edge* is a sync edge whose source is not async-category and that has `timeoutMs > 0` or `retries ≥ 1` (engine-sanitized: retries rounded, 0–5; timeout ≤ 60000 ms; non-finite = absent). Per-edge state lives in `edge-state.ts` and is carried tick to tick. Every other edge takes no new code path, so graphs without policy edges produce byte-identical frames.
+A *policy edge* is a sync edge whose source is not async-category and that has `timeoutMs > 0` or `retries ≥ 1`, or a circuit breaker (then `{ retries: 0 }`, so it reports `failRate`; T-8.6) (engine-sanitized: retries rounded, 0–5; timeout ≤ 60000 ms; non-finite = absent). Per-edge state lives in `edge-state.ts` and is carried tick to tick. Every other edge takes no new code path, so graphs without policy edges produce byte-identical frames.
 
 ```
 attempts   = fresh + Σ retryCarry                      // retries ride the edge, not the source's capacity
@@ -97,6 +100,25 @@ Timed-out work still loads the target: it served or queued it, and only the call
 | `flush` | cache hitRate → 0, recovers toward configured rate at ~1.5%/tick |
 | `partition` | edges crossing the target become unavailable for `forSec` |
 | `hotkey` | fraction `skew` of traffic routes to a single shard/instance — breaks "just shard it" answers |
+
+## Circuit breaker (T-8.6)
+
+An optional `DesignEdge.breaker` on a sync edge whose source is not a queue/stream (async edges ignore it). Settings are in seconds; the engine resolves them to ticks (`max(1, round(sec × 10))`) and clamps to `BREAKER_LIMITS` (threshold 5–95%, trip window 0.1–10 s, cooldown 0.5–60 s). State machine: `simulation/breaker.ts`; per-run state: the `breakers` map in `createSimRun`.
+
+| phase | admits | leaves when |
+|---|---|---|
+| closed | all calls | the edge's call failure rate is strictly above the threshold for `tripTicks` consecutive ticks → open (a zero-attempt tick resets the streak) |
+| open | none: calls fail fast at the caller (unroutable → client error), no target load, no retries | `cooldownTicks` open ticks completed → half-open at the start of the next tick |
+| half-open | `BREAKER_PROBE_FRACTION` = 10% for exactly one tick (the other 90% fail fast) | end of that tick: failure rate over threshold → open (cooldown restarts), else closed |
+
+The failure rate is T-8.5's per-edge `failRate` (shed by the target + timed out, over *admitted* calls only), so a slow target trips it even without drops, and a partitioned edge (failRate 1) trips it too. Defaults (`DEFAULT_BREAKER`): open at 50% errors · 0.5 s trip window · 5 s cooldown; probe 10% for one tick. Latency needs no change: T-8.4's weights come from fresh flow, which is gated too, so an open edge adds 0 ms and a half-open one 10%. An LB edge's open breaker rejects its own share; there is no rerouting.
+
+Log lines (after node transitions, in `graph.edges` order, half-open before open/closed within an edge):
+- `{Source} → {Target} breaker open at {pct}% errors — failing fast` (warning)
+- `{Source} → {Target} breaker half-open — probing` (info)
+- `{Source} → {Target} breaker closed — traffic restored` (recovered)
+
+Frames: `perEdge[id].breaker` = the phase that governed that tick's traffic (so it always matches the frame's `rps`), only on breaker edges. The tick that trips still reads `closed` and carries the "open" line.
 
 ## Consistency check (strong-consistency NFR)
 
@@ -147,6 +169,7 @@ Golden tests in `tests/engine.test.ts`: tiny graphs with hand-computed expectati
 7. T-8.2 client vs async drops + latency: client → app → queue → worker (sync edges, worker saturated) → p95 = 1.6 × (client + app + queue enqueue), no worker term; an async edge into an overloaded worker → errorRate 0, all worker drops in `asyncDroppedRps`; a sink shared by a sync caller and a queue's workers splits its drops by client share (half → errorRate, half → async); queue retention overflow → errorRate 0, `asyncDroppedRps` > 0; frame `maxLagSec` = per-node max `lagSec`.
 8. App calling a cache then a DB (two sync calls) pays both; an LB split over two backends averages them, and a partitioned backend leaves the live one charged in full.
 9. Retry storm: a 1 s ×2 spike on a dependency with timeout 200 ms + retries 3 settles at ~3.4× load and ~65% errors for the rest of the run; without retries it recovers 0.3 s after the spike.
+10. Breaker under a dependency outage: open at tick 14, probe fails at 65, probe closes at 116 (exact); the retry storm recovers with the breaker on.
 
 ## Decisions
 
@@ -178,3 +201,5 @@ Golden tests in `tests/engine.test.ts`: tiny graphs with hand-computed expectati
 - 2026-11-06 (T-8.3 planning): split vs call edges. Whether an edge splits or calls is decided by `registry.isSplitSource(sourceKind)` (`ComponentDef.splitsTraffic`, lb only). `edgeMultiplier(edge, sourceKind)` (engine.ts, not on the public index) is the single edge → number seam: split → `trafficShare ?? 1`, call → `callsPerRequest ?? 1`; `propagateTraffic` and the queue pull headroom both go through it. Propagation is the same math (both multiply the forwarded flow), so no golden number changed. The engine never reads legacy fields — a call edge's `trafficShare` is ignored; migrating old files is the persistence guard's job (`parseDesignGraph`, which the CLI also uses). Latency is still flow-weighted (`meanPathMs`); T-8.4 replaces it with a callsPerRequest-weighted sum on call edges and keeps the average on split edges.
 - 2026-11-06 (T-8.4 planning): client-path latency — `clientPathTerms` (weights) + `meanPathMs` (fold) in engine.ts, separate so tail models (T-8.7) reuse the weights. Call edges (non-LB source) weigh flow(e)/served(source) = callsPerRequest × pass-through, so sequential calls sum and a cache's DB call charges only misses + writes (weights are flow-derived, never read from callsPerRequest, so hits never pay the DB). The pre-M8 fold was already this sum; it read as an average only because sum-to-1 shares halved fan-outs. LB splits are now a normalized flow-weighted average (denominator = Σ flow on the LB's sync forward edges, not served(lb)), so a partitioned backend no longer halves the path (2-backend LB, one cut: p95 11.77 → 20.30 ms; its share still errors via unroutable). Calls are sequential (cpr 3 = 3× the callee path); parallel fan-out (max) is not modelled. Dead edges weigh 0, async edges stay off the path, float fold order unchanged, so no existing golden changes value.
 - 2026-11-06 (T-8.5 planning): timeouts and retries on sync call edges (not edges out of a queue/stream: consumers pull). An attempt fails when the target sheds it (tail-drop: `rejectFraction = min(1, dropped / arrivals)`, a full queue rejects new arrivals first) or when it outlasts the timeout, as a *fraction* `exp(−timeoutMs / pathMs(target))` — M/M/1 time-in-system is exponential, so this is `P(T > t)`; an all-or-nothing cliff (`pathMs > timeout ⇒ 100%`) would flip on a 1 ms config change and hide the realistic trickle of timeouts a tight timeout causes on a healthy service, which is what retries are for. Failed attempts with a retry left are re-offered to the same target next tick on top of fresh traffic, with no backoff; timed-out work still loads the target. Only exhausted attempts are client-visible: each policy edge adds `exhausted − rejected` to the T-8.2 split (× source client share), both tallies floored at 0; dead edges book everything unroutable and reset the carry. Latency per term = attempts × `E[min(T, t)]` (`termMs`, the single per-term transform T-8.7 scales/caps), with T-8.4's weights now from fresh flows so retries don't change their meaning. Frames: `perEdge` `retryRps`/`failRate` only on policy edges. Seam: `edge-state.ts` (EdgePolicy/EdgeState/stepEdge); T-8.6 adds the breaker fields there.
+- 2026-11-06 (T-8.6 planning): circuit breaker — per sync edge, optional (`DesignEdge.breaker`, seconds; engine resolves to ticks, clamps to BREAKER_LIMITS). Trips on the edge's own call failure rate (drops at target + timeouts, over admitted calls only — a client-side breaker, so a slow target trips it without dropping), strictly > threshold for tripTicks consecutive ticks; zero-attempt ticks reset the streak. Open = edgePass 0: calls book as unroutable at the caller (partition path → client errorRate), no target load, no retries scheduled. After cooldownTicks open ticks it half-opens for exactly one tick admitting BREAKER_PROBE_FRACTION 0.1 (the other 90% fail fast); the probe's failure rate decides closed vs re-open (cooldown restarts) at the end of that tick. Latency needs no change (T-8.4 weights are flow-derived: open adds 0 ms). Events after node transitions, graph.edges order, half-open before open/closed. LB edges reject their share, no rerouting. Async edges ignore it.
+- 2026-11-07 (T-8.6 build): the breaker state machine lives in `breaker.ts` and its per-run state in `createSimRun`'s `breakers` map, not in `edge-state.ts` as T-8.5's entry anticipated. A breaker-only edge becomes a policy edge `{ retries: 0 }` so `stepEdge` reports its `failRate`; edges out of a queue/stream get no breaker (same `edgeSupportsResilience` rule as timeouts/retries). `stepEdge` takes `admit` and scales the retry carry by it, so rejected retries schedule nothing.

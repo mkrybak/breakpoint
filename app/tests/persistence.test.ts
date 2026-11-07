@@ -511,6 +511,49 @@ describe("edge migration (T-8.3)", () => {
     ]);
   });
 
+  it("a breaker round-trips on a call edge and junk keys inside it are dropped (T-8.6)", () => {
+    const graph = legacyGraph();
+    graph.edges = [
+      {
+        id: "c-lb",
+        source: "c",
+        target: "lb",
+        callsPerRequest: 1,
+        breaker: { errorThreshold: 0.5, tripAfterSec: 0.5, cooldownSec: 5, extra: 1 },
+        kind: "sync",
+      },
+    ];
+    const record = parseDesignRecord(
+      JSON.stringify({ id: "d1", name: "Guarded", graph }),
+    );
+    expect(record?.graph.edges).toStrictEqual([
+      {
+        id: "c-lb",
+        source: "c",
+        target: "lb",
+        kind: "sync",
+        callsPerRequest: 1,
+        breaker: { errorThreshold: 0.5, tripAfterSec: 0.5, cooldownSec: 5 },
+      },
+    ]);
+  });
+
+  it("rejects a malformed breaker (T-8.6)", () => {
+    const graph = legacyGraph();
+    graph.edges = [
+      {
+        id: "c-lb",
+        source: "c",
+        target: "lb",
+        breaker: { errorThreshold: "0.5", tripAfterSec: 0.5, cooldownSec: 5 },
+        kind: "sync",
+      },
+    ];
+    expect(
+      parseDesignRecord(JSON.stringify({ id: "d1", name: "Bad", graph })),
+    ).toBeNull();
+  });
+
   it("rejects a non-numeric retries (T-8.5)", () => {
     const graph = legacyGraph();
     graph.edges = [

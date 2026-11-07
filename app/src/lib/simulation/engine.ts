@@ -22,6 +22,15 @@ import {
 } from "./node-models";
 import { mulberry32, type Rng } from "./rng";
 import {
+  beginBreakerTick,
+  breakerEvent,
+  CLOSED_BREAKER,
+  endBreakerTick,
+  resolveBreaker,
+  type BreakerState,
+  type ResolvedBreaker,
+} from "./breaker";
+import {
   buildEdgePolicies,
   initialEdgeState,
   pendingRetries,
@@ -222,6 +231,8 @@ export interface PropagationOverrides {
   deadEdges?: readonly string[];
   /** edge id → retry flow re-offered on top of the edge's fresh flow this tick (T-8.5) */
   retryFlow?: Record<string, Flow>;
+  /** edge id → fraction of the edge's flow admitted this tick (circuit breaker, T-8.6); absent = 1 */
+  edgePass?: Record<string, number>;
 }
 
 /** T-2.3 plugs the capacity model in here; default = serve everything. */
@@ -254,7 +265,9 @@ export function edgeMultiplier(edge: DesignEdge, sourceKind: ComponentKind): num
  * hits + misses === reads exact.
  *
  * Flow aimed at a dead (partitioned) edge is booked in `unroutable` at the
- * source — the tick loop counts it as dropped there.
+ * source — the tick loop counts it as dropped there. A breaker's `edgePass`
+ * admits only that fraction; the rest books in `unroutable` at the source
+ * (fails fast as a caller error, like a partition).
  */
 export function propagateTraffic(
   graph: DesignGraph,
@@ -300,12 +313,23 @@ export function propagateTraffic(
       const to = position.get(edge.target);
       // back/self edges (cycles) and edges into the entry carry nothing
       if (to === undefined || to <= (position.get(id) ?? 0)) continue;
-      const fresh = scaleFlow(forwarded, edgeMultiplier(edge, node.kind));
+      let fresh = scaleFlow(forwarded, edgeMultiplier(edge, node.kind));
       const retry = overrides.retryFlow?.[edge.id];
-      const flow = retry ? addFlow(fresh, retry) : fresh;
+      let flow = retry ? addFlow(fresh, retry) : fresh;
       if (dead.has(edge.id)) {
         unroutable[id] = addFlow(unroutable[id], flow);
         continue;
+      }
+      const pass = overrides.edgePass?.[edge.id] ?? 1;
+      if (pass < 1) {
+        const admitted = scaleFlow(flow, pass);
+        unroutable[id] = addFlow(unroutable[id], {
+          read: flow.read - admitted.read,
+          write: flow.write - admitted.write,
+        });
+        flow = admitted;
+        // latency weights come from fresh flow: an open edge charges 0 ms
+        fresh = scaleFlow(fresh, pass);
       }
       perEdge[edge.id] = flow;
       freshPerEdge[edge.id] = fresh;
@@ -527,7 +551,8 @@ export interface SimRun {
  * input and pure: the only randomness is mulberry32(scenario.seed) handed to
  * `applyRules`, so the same (graph, scenario, seed) always yields
  * byte-identical frames. Policy edges (timeouts/retries, T-8.5) carry
- * EdgeState tick-to-tick; no RNG, so determinism holds. simulate() drains it
+ * EdgeState tick-to-tick, breaker edges a BreakerState (T-8.6); no RNG, so
+ * determinism holds. simulate() drains it
  * in one go; the worker paces it in real time.
  */
 export function createSimRun(
@@ -564,6 +589,28 @@ export function createSimRun(
   const edgeStates = new Map<string, EdgeState>(
     [...policies].map(([id, policy]) => [id, initialEdgeState(policy)]),
   );
+  // T-8.6: breakers on edges that support resilience (all have a policy, so failRate exists)
+  const breakers = new Map<
+    string,
+    { edge: DesignEdge; cfg: ResolvedBreaker; state: BreakerState }
+  >();
+  for (const edge of graph.edges) {
+    const cfg = resolveBreaker(edge, TICKS_PER_SEC);
+    if (cfg && policies.has(edge.id)) {
+      breakers.set(edge.id, { edge, cfg, state: CLOSED_BREAKER });
+    }
+  }
+  const breakerLine = (
+    edge: DesignEdge,
+    to: BreakerState["phase"],
+    rate?: number,
+  ): string =>
+    breakerEvent(
+      nodeById.get(edge.source)?.label ?? edge.source,
+      nodeById.get(edge.target)?.label ?? edge.target,
+      to,
+      rate,
+    );
   let tickIndex = 0;
 
   return {
@@ -627,11 +674,29 @@ export function createSimRun(
         const retry = pendingRetries(state);
         if (flowRps(retry) > 0) retryFlow[id] = retry;
       }
+      const edgePass: Record<string, number> = {};
+      const tickPhase = new Map<string, BreakerState["phase"]>();
+      const breakerLines = new Map<string, string[]>();
+      for (const [id, b] of breakers) {
+        const begun = beginBreakerTick(b.state, b.cfg);
+        b.state = begun.state;
+        tickPhase.set(id, begun.state.phase);
+        if (begun.pass < 1) edgePass[id] = begun.pass;
+        breakerLines.set(
+          id,
+          begun.halfOpened ? [breakerLine(b.edge, "half-open")] : [],
+        );
+      }
       const prop = propagateTraffic(
         graph,
         splitFlow(effects.offeredRps, scenario.readRatio),
         (node, def, inflow) => evaluate(node, def, inflow).served,
-        { hitRate: effects.hitRate, deadEdges: effects.deadEdges, retryFlow },
+        {
+          hitRate: effects.hitRate,
+          deadEdges: effects.deadEdges,
+          retryFlow,
+          edgePass,
+        },
       );
       const shares = clientShares(graph, prop, clientSharePrev);
 
@@ -690,6 +755,7 @@ export function createSimRun(
           dead: dead.has(edge.id),
           rejectFraction: outputs.get(edge.target)?.rejectFraction ?? 0,
           targetPathMs: pathMs.get(edge.target) ?? 0,
+          admit: edgePass[edge.id] ?? 1,
         });
         edgeStates.set(edge.id, step.next);
         edgeTicks.set(edge.id, step);
@@ -702,13 +768,29 @@ export function createSimRun(
       clientDropped = Math.max(0, clientDropped);
       asyncDropped = Math.max(0, asyncDropped);
 
+      // T-8.6: fold this tick's failure rate (admitted calls only) into each breaker
+      for (const [id, b] of breakers) {
+        const failRate = edgeTicks.get(id)?.failRate ?? 0;
+        const ended = endBreakerTick(b.state, b.cfg, failRate);
+        b.state = ended.state;
+        if (ended.transition) {
+          breakerLines
+            .get(id)
+            ?.push(breakerLine(b.edge, ended.transition, failRate));
+        }
+      }
+      for (const lines of breakerLines.values()) events.push(...lines);
+
       const perEdge: SimFrame["perEdge"] = {};
       for (const edge of graph.edges) {
         const rps = flowRps(prop.perEdge[edge.id]);
         const step = edgeTicks.get(edge.id);
-        perEdge[edge.id] = step
-          ? { rps, retryRps: step.retryRps, failRate: step.failRate }
-          : { rps };
+        const phase = tickPhase.get(edge.id);
+        perEdge[edge.id] = {
+          rps,
+          ...(step ? { retryRps: step.retryRps, failRate: step.failRate } : {}),
+          ...(phase !== undefined ? { breaker: phase } : {}),
+        };
       }
 
       return {

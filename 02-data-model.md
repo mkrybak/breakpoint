@@ -83,6 +83,13 @@ interface DesignEdge {
   callsPerRequest?: number;   // call (every other source) edges only: calls per request; absent = 1, 0.2 = 20% — T-8.3
   timeoutMs?: number;         // sync call edges only: ms the caller waits per attempt; absent = no timeout — T-8.5
   retries?: number;           // sync call edges only: extra attempts after a failure (0–5); absent = 0 — T-8.5
+  breaker?: EdgeBreaker;      // T-8.6, sync edges only; absent = no breaker
+}
+
+interface EdgeBreaker {       // T-8.6; seconds, engine resolves to ticks and clamps
+  errorThreshold: number;     // 0–1: trips when the edge's call failure rate is strictly above it
+  tripAfterSec: number;       // consecutive seconds over the threshold before it opens
+  cooldownSec: number;        // seconds it stays open (fail fast) before a half-open probe
 }
 
 interface DesignGraph { nodes: DesignNode[]; edges: DesignEdge[]; entryNodeId: string; }
@@ -123,7 +130,7 @@ interface SimFrame {           // one per tick (100ms), streamed worker → UI
   t: number;
   perNode: Record<string, { util: number; queued: number; dropped: number; state: "ok"|"hot"|"saturated"|"overloaded"|"down";
                             queueDepth?: number; lagSec?: number }>;   // NodeFrame; queueDepth (msgs) / lagSec async nodes only
-  perEdge: Record<string, { rps: number; retryRps?: number; failRate?: number }>;   // EdgeFrame; rps includes retries; retryRps/failRate on timeout/retry (policy) edges only — T-8.5
+  perEdge: Record<string, { rps: number; retryRps?: number; failRate?: number; breaker?: "closed" | "open" | "half-open" }>;   // EdgeFrame; rps includes retries; retryRps/failRate on timeout/retry (policy) edges only — T-8.5; breaker = phase that governed the tick, breaker edges only — T-8.6
   p95Ms: number; errorRate: number; servedRps: number;   // errorRate/servedRps: client path only
   asyncDroppedRps: number;     // lost off the client path (queue overflow, consumer drops) — never in errorRate
   maxLagSec: number;           // max async-node lagSec this tick; 0 with no async nodes
@@ -234,3 +241,4 @@ scorecards   (id, run_id, grader_id → users, rubric_scores JSONB, feedback_md 
 - 2026-11-06 (T-8.2 planning): `Scenario.pass.maxLagSec?` (optional lag NFR) and required `SimFrame.asyncDroppedRps` / `maxLagSec`; errorRate counts client-path drops only. Rules in 03-simulation-engine Decisions (T-8.2).
 - 2026-11-06 (T-8.3 planning): split vs call edges. Which kinds split is registry data: `ComponentDef.splitsTraffic` (`true` on `lb` only), read through `registry.isSplitSource(kind)` by the engine, validation, design store, persistence and `FlowEdge`; `api_gateway` stays a call source (route mixes are fractional calls). `trafficShare`/`autoShare` (split edges) and `callsPerRequest` (call edges) are all optional; absent reads as 1, and the store writes explicit values on new edges. The persistence guard `parseDesignGraph` replaces `isValidEdge`/`isValidGraph`: it rebuilds every edge for its source kind (a legacy call edge's `trafficShare` becomes `callsPerRequest`; foreign and unknown edge keys are dropped; an edge whose source isn't a node is a call edge). Migration is on read only: stored records are rewritten by the next autosave, not on load. `scripts/sim.ts` parses through the same guard. The T-1.4 rule "sync + async both count toward the sum" now applies to split sources only; call edges never sum.
 - 2026-11-06 (T-8.5 planning): DesignEdge.timeoutMs?/retries? (sync call edges, engine-sanitized 0–60000 ms / 0–5); per-edge frame type named EdgeFrame, retryRps/failRate optional and only on edges with a policy, so old frames/bundles stay valid; edited in the right panel's Edge section.
+- 2026-11-06 (T-8.6 planning): DesignEdge.breaker?: EdgeBreaker { errorThreshold 0–1, tripAfterSec, cooldownSec } (seconds, like StressRule; defaults 0.5 / 0.5 / 5 live in simulation's DEFAULT_BREAKER since core holds no values). parseEdge keeps it on split and call edges, rejects a malformed one, never clamps (the engine does). SimFrame.perEdge[id].breaker (BreakerPhase) appears only on breaker edges. Toggling a breaker records config_changed.

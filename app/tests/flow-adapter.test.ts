@@ -287,4 +287,33 @@ describe("flow-adapter", () => {
       graph.edges,
     );
   });
+
+  it("breaker survives a round-trip and stays absent when absent (T-8.6)", () => {
+    const nodes = ["a", "b", "c"].map((id, k) => ({
+      id,
+      kind: "app_server" as const,
+      label: id,
+      position: { x: k * 100, y: 0 },
+      config: {},
+    }));
+    const graph: DesignGraph = {
+      nodes,
+      edges: [
+        {
+          id: "e1",
+          source: "a",
+          target: "b",
+          kind: "sync",
+          callsPerRequest: 1,
+          breaker: { errorThreshold: 0.5, tripAfterSec: 0.5, cooldownSec: 5 },
+        },
+        { id: "e2", source: "b", target: "c", kind: "sync", callsPerRequest: 1 },
+      ],
+      entryNodeId: "a",
+    };
+    const { nodes: flowNodes, edges } = toFlow(graph, []);
+    const back = fromFlow(flowNodes, edges, graph.entryNodeId).edges;
+    expect(back).toStrictEqual(graph.edges);
+    expect("breaker" in back[1]).toBe(false);
+  });
 });
