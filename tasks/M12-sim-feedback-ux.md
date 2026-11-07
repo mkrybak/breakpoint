@@ -30,7 +30,8 @@ Run UI tasks via `/ui` or `/build` (screenshots required).
 **Accept:** A node whose load drops because an upstream breaker opened logs "X idle (breaker open)" (neutral), not a green "X recovered". "Recovered" is logged only when the node serves real traffic again. A breaker that re-opens within 1 s of closing logs one line ("breaker re-opened 0.5 s after closing") instead of a closed/overloaded/open burst. Update the T-8.6 golden event timeline, and record old → new lines in Decisions.
 
 ### T-12.3 — Resilience visible on the canvas
-- [ ] T-12.3 done
+- [x] T-12.3 done
+  - Also: `supportsResilience` derived on `FlowEdgeData`; chip text in new `edge-chip.ts`; the stopwatch is `⏱` + U+FE0E (lead fix after screenshots).
 
 **Files:** `src/components/canvas/edges/FlowEdge.tsx`, `src/stores/flow-adapter.ts`
 **Accept:** The idle edge chip shows the edge's settings compactly (`⏱200 ↻3`, plus the existing breaker suffix). While running, an edge with retries shows its amplification (attempts ÷ fresh calls, e.g. `↻ 3.4× load`, amber above 1.5×) from `perEdge.retryRps`/`rps`. It's readable without selecting the edge, and replay scrubbing updates it.
@@ -76,3 +77,5 @@ Run UI tasks via `/ui` or `/build` (screenshots required).
   - 21.1 closed → 21.7 "App server → Payments API breaker closed at 21.1s — traffic restored" + 21.7 "Payments API recovered at 21.2s".
 
   Call: a genuine close logs late, by up to the time a re-trip stays possible: 0.6 s at the default 0.5 s trip window, 0 s for trip windows over 1 s. Lead call: a line released late carries its real time (" at 21.1s" after the state word); released on its own tick it keeps the plain wording. T-8.5 retry-storm-with-breaker golden: last line `… closed — traffic restored` → `… closed at 6.5s — traffic restored`. Severity: idle = info, re-opened = warning. Placeholder line kept (T-12.1 appended below it too).
+- 2026-11-07 (T-12.3): edge chip amplification = rps ÷ (rps − retryRps) per frame, unclamped (retry-storm spike: 3.6× sustained, one 8.9× frame as the spike ends); shown only when it rounds above 1.0×, amber above 1.5×. Timeout shows ms below 1 s, else seconds (`⏱1.5s`). Settings/breaker show only where edgeSupportsResilience holds (derived `supportsResilience` on FlowEdgeData). Chip text lives in `components/canvas/edges/edge-chip.ts`.
+- 2026-11-07 (T-12.3, lead call): the chip's stopwatch is written `⏱` + U+FE0E (text presentation). Without it Chromium draws a white colour-emoji stopwatch that is heavier than the 10px mono chip. T-12.4's `chipWidth` ignores U+FE0E.

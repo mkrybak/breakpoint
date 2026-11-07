@@ -7,13 +7,20 @@ import {
   type EdgeProps,
 } from "@xyflow/react";
 import { edgeDashDuration, edgeWidth } from "@/components/canvas/sim-visuals";
-import { getComponentDef, isSplitSource } from "@/lib/registry";
+import { isSplitSource } from "@/lib/registry";
 import { useDesignStore } from "@/stores/design-store";
 import { useSimStore } from "@/stores/sim-store";
 import type { ComponentFlowEdge } from "@/stores/flow-adapter";
+import { edgeChipSegments, type ChipTone } from "./edge-chip";
 
 /** Upper bound on the call-edge editor (T-8.3); the engine itself is unbounded. */
 const MAX_CALLS_PER_REQUEST = 100;
+
+const TONE_CLASS: Record<ChipTone, string | undefined> = {
+  muted: undefined,
+  amber: "text-amber-400",
+  rose: "text-rose-400",
+};
 
 export function FlowEdge({
   id,
@@ -28,9 +35,10 @@ export function FlowEdge({
   data,
 }: EdgeProps<ComponentFlowEdge>) {
   const updateEdge = useDesignStore((s) => s.updateEdge);
-  const rps = useSimStore((s) => s.latestFrame?.perEdge[id]?.rps ?? 0);
-  // T-8.6: same source as rps, so replay scrubbing shows the phase too
-  const breakerPhase = useSimStore((s) => s.latestFrame?.perEdge[id]?.breaker);
+  // T-12.3: one subscription; latestFrame is the scrubbed frame during replay
+  const edgeFrame = useSimStore((s) => s.latestFrame?.perEdge[id]);
+  const rps = edgeFrame?.rps ?? 0;
+  const breakerPhase = edgeFrame?.breaker;
   const [path, labelX, labelY] = getBezierPath({
     sourceX,
     sourceY,
@@ -44,12 +52,7 @@ export function FlowEdge({
   const calls = data?.callsPerRequest ?? 1;
   const kind = data?.kind ?? "sync";
   const isAuto = isSplit && data?.autoShare !== false;
-  // breakers apply to sync calls whose source isn't a queue/stream (edgeSupportsResilience)
-  const hasBreaker =
-    kind === "sync" &&
-    data?.breaker !== undefined &&
-    data.sourceKind !== undefined &&
-    getComponentDef(data.sourceKind).category !== "async";
+  const segments = edgeChipSegments(data, edgeFrame);
 
   const live = rps > 0;
   const width = live ? edgeWidth(rps) : selected ? 2 : 1.5;
@@ -162,28 +165,12 @@ export function FlowEdge({
             </div>
           ) : (
             <span className="rounded bg-neutral-900/90 px-1.5 py-0.5 font-mono text-[10px] text-neutral-400">
-              {isSplit
-                ? `${Math.round(share * 100)}%`
-                : `×${Math.round(calls * 100) / 100}`}
-              {isAuto ? " · auto" : ""}
-              {kind === "async" ? " · async" : ""}
-              {hasBreaker && (
-                <span
-                  className={
-                    breakerPhase === "open"
-                      ? "text-rose-400"
-                      : breakerPhase === "half-open"
-                        ? "text-amber-400"
-                        : undefined
-                  }
-                >
-                  {breakerPhase === "open"
-                    ? " · breaker open"
-                    : breakerPhase === "half-open"
-                      ? " · breaker probing"
-                      : " · breaker"}
+              {segments.map((seg, i) => (
+                <span key={seg.key} className={TONE_CLASS[seg.tone]}>
+                  {i > 0 ? " · " : ""}
+                  {seg.text}
                 </span>
-              )}
+              ))}
             </span>
           )}
         </div>

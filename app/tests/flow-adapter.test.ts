@@ -72,7 +72,34 @@ describe("flow-adapter", () => {
       kind: "sync",
       callsPerRequest: 1,
       sourceKind: "client",
+      supportsResilience: true,
     });
+  });
+
+  it("derives supportsResilience (T-12.3)", () => {
+    const graph: DesignGraph = {
+      nodes: [
+        { id: "c", kind: "client", label: "Client", position: { x: 0, y: 0 }, config: {} },
+        { id: "a", kind: "app_server", label: "App", position: { x: 100, y: 0 }, config: {} },
+        { id: "q", kind: "queue", label: "Queue", position: { x: 200, y: 0 }, config: {} },
+        { id: "w", kind: "worker", label: "Worker", position: { x: 300, y: 0 }, config: {} },
+        { id: "d", kind: "db_sql", label: "DB", position: { x: 400, y: 0 }, config: {} },
+      ],
+      edges: [
+        { id: "e1", source: "c", target: "a", kind: "sync" },
+        { id: "e2", source: "q", target: "w", kind: "sync" },
+        { id: "e3", source: "a", target: "d", kind: "async" },
+      ],
+      entryNodeId: "c",
+    };
+
+    const { edges } = toFlow(graph, []);
+    const flag = (id: string) =>
+      edges.find((e) => e.id === id)?.data?.supportsResilience;
+
+    expect(flag("e1")).toBe(true);
+    expect(flag("e2")).toBe(false);
+    expect(flag("e3")).toBe(false);
   });
 
   it("fromFlow prunes dangling edges", () => {

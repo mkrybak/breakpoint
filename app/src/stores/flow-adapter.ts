@@ -1,5 +1,6 @@
 import { MarkerType, type Edge, type Node } from "@xyflow/react";
 import type { ComponentKind, DesignGraph, EdgeBreaker } from "@/lib/core";
+import { edgeSupportsResilience } from "@/lib/simulation";
 
 export type ComponentNodeData = {
   kind: ComponentKind;
@@ -25,6 +26,8 @@ export type FlowEdgeData = {
   breaker?: EdgeBreaker;
   /** Source node's kind — sourceKind lets FlowEdge pick split vs call without a store lookup. */
   sourceKind?: ComponentKind;
+  /** T-12.3, derived in toFlow (never persisted): edgeSupportsResilience(edge, sourceKind). Absent reads false. */
+  supportsResilience?: boolean;
 };
 
 export type ComponentFlowEdge = Edge<FlowEdgeData, "flow">;
@@ -71,6 +74,7 @@ export function toFlow(
         retries: e.retries,
         breaker: e.breaker,
         sourceKind: kindById.get(e.source),
+        supportsResilience: edgeSupportsResilience(e, kindById.get(e.source)),
       },
     })),
   };
