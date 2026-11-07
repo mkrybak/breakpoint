@@ -25,7 +25,7 @@ function node(
 }
 
 function edge(id: string, source: string, target: string) {
-  return { id, source, target, trafficShare: 1, kind: "sync" as const };
+  return { id, source, target, callsPerRequest: 1, kind: "sync" as const };
 }
 
 describe("stampAction", () => {

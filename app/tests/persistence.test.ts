@@ -57,7 +57,7 @@ function fixtureGraph(): DesignGraph {
         id: "e-client-app",
         source: "n-client",
         target: "n-app",
-        trafficShare: 1,
+        callsPerRequest: 1,
         kind: "sync",
       },
     ],
@@ -360,19 +360,40 @@ describe("parseRunBundle", () => {
 });
 
 describe("autoShare import (T-6.1)", () => {
+  /** client → lb → app: the lb→app edge is a split edge, so it keeps autoShare. */
+  function lbGraph(autoShare?: boolean): DesignGraph {
+    return {
+      nodes: [
+        { id: "n-client", kind: "client", label: "Client", position: { x: 0, y: 0 }, config: {} },
+        { id: "n-lb", kind: "lb", label: "LB", position: { x: 100, y: 0 }, config: {} },
+        { id: "n-app", kind: "app_server", label: "App", position: { x: 200, y: 0 }, config: {} },
+      ],
+      edges: [
+        { id: "e-client-lb", source: "n-client", target: "n-lb", callsPerRequest: 1, kind: "sync" },
+        {
+          id: "e-lb-app",
+          source: "n-lb",
+          target: "n-app",
+          trafficShare: 1,
+          kind: "sync",
+          ...(autoShare !== undefined ? { autoShare } : {}),
+        },
+      ],
+      entryNodeId: "n-client",
+    };
+  }
+
   it("accepts edges with and without autoShare — no migration", () => {
-    const graph = fixtureGraph();
-    graph.edges[0].autoShare = false;
     const withFlag = parseDesignRecord(
-      JSON.stringify(buildDesignRecord("d1", "Design", graph, "practice")),
+      JSON.stringify(buildDesignRecord("d1", "Design", lbGraph(false), "practice")),
     );
-    expect(withFlag?.graph.edges[0].autoShare).toBe(false);
+    expect(withFlag?.graph.edges[1].autoShare).toBe(false);
 
     const absent = parseDesignRecord(
-      JSON.stringify(buildDesignRecord("d2", "Design", fixtureGraph(), "practice")),
+      JSON.stringify(buildDesignRecord("d2", "Design", lbGraph(), "practice")),
     );
     expect(absent).not.toBeNull();
-    expect(absent?.graph.edges[0].autoShare).toBeUndefined();
+    expect(absent?.graph.edges[1].autoShare).toBeUndefined();
   });
 
   it("rejects a non-boolean autoShare", () => {
@@ -381,6 +402,95 @@ describe("autoShare import (T-6.1)", () => {
     ) as { graph: { edges: Record<string, unknown>[] } };
     raw.graph.edges[0].autoShare = "yes";
     expect(parseDesignRecord(JSON.stringify(raw))).toBeNull();
+  });
+});
+
+describe("edge migration (T-8.3)", () => {
+  /** Pre-M8 shape: every edge carries trafficShare, whatever its source. */
+  function legacyGraph(): Record<string, unknown> {
+    return {
+      nodes: [
+        { id: "c", kind: "client", label: "Client", position: { x: 0, y: 0 }, config: {} },
+        { id: "lb", kind: "lb", label: "LB", position: { x: 100, y: 0 }, config: {} },
+        { id: "a", kind: "app_server", label: "App", position: { x: 200, y: 0 }, config: {} },
+        { id: "cache", kind: "cache", label: "Cache", position: { x: 300, y: 0 }, config: {} },
+        { id: "q", kind: "queue", label: "Queue", position: { x: 300, y: 100 }, config: {} },
+      ],
+      edges: [
+        { id: "c-lb", source: "c", target: "lb", trafficShare: 1, kind: "sync" },
+        { id: "lb-a", source: "lb", target: "a", trafficShare: 1, autoShare: false, kind: "sync" },
+        { id: "a-cache", source: "a", target: "cache", trafficShare: 1, kind: "sync" },
+        { id: "a-q", source: "a", target: "q", trafficShare: 0.2, autoShare: true, kind: "async" },
+      ],
+      entryNodeId: "c",
+    };
+  }
+
+  const migratedEdges = [
+    { id: "c-lb", source: "c", target: "lb", kind: "sync", callsPerRequest: 1 },
+    { id: "lb-a", source: "lb", target: "a", kind: "sync", trafficShare: 1, autoShare: false },
+    { id: "a-cache", source: "a", target: "cache", kind: "sync", callsPerRequest: 1 },
+    { id: "a-q", source: "a", target: "q", kind: "async", callsPerRequest: 0.2 },
+  ];
+
+  function legacyRecordJson(id: string): string {
+    return JSON.stringify({ id, name: "Legacy", mode: "practice", graph: legacyGraph() });
+  }
+
+  it("maps a non-lb trafficShare to callsPerRequest and drops foreign fields", () => {
+    const record = parseDesignRecord(legacyRecordJson("d1"));
+    expect(record).not.toBeNull();
+    expect(record?.graph.edges).toStrictEqual(migratedEdges);
+  });
+
+  it("prefers callsPerRequest over a stray trafficShare; lb edges drop callsPerRequest", () => {
+    const graph = legacyGraph();
+    graph.edges = [
+      { id: "c-lb", source: "c", target: "lb", trafficShare: 0.5, callsPerRequest: 2, kind: "sync" },
+      { id: "lb-a", source: "lb", target: "a", trafficShare: 1, callsPerRequest: 3, kind: "sync" },
+    ];
+    const record = parseDesignRecord(
+      JSON.stringify({ id: "d1", name: "Mixed", graph }),
+    );
+    expect(record?.graph.edges).toStrictEqual([
+      { id: "c-lb", source: "c", target: "lb", kind: "sync", callsPerRequest: 2 },
+      { id: "lb-a", source: "lb", target: "a", kind: "sync", trafficShare: 1 },
+    ]);
+  });
+
+  it("rejects a non-finite callsPerRequest", () => {
+    const graph = legacyGraph();
+    graph.edges = [{ id: "c-lb", source: "c", target: "lb", callsPerRequest: "2", kind: "sync" }];
+    expect(parseDesignRecord(JSON.stringify({ id: "d1", name: "Bad", graph }))).toBeNull();
+  });
+
+  it("loadDesign migrates on read without rewriting the stored record", () => {
+    localStorage.setItem(designStorageKey("legacy"), legacyRecordJson("legacy"));
+    expect(loadDesign("legacy")?.graph.edges).toStrictEqual(migratedEdges);
+    expect(localStorage.getItem(designStorageKey("legacy"))).toContain(
+      '"trafficShare":0.2',
+    );
+  });
+
+  it("parseRunBundle migrates both the design and the result snapshot; frames verbatim", () => {
+    const bundle = buildRunBundle(
+      buildDesignRecord("d1", "My design", fixtureGraph(), "practice"),
+      fixtureScenario(),
+      fixtureResult(),
+    );
+    const raw = JSON.parse(JSON.stringify(bundle)) as {
+      design: { graph: unknown };
+      result: { designSnapshot: unknown; frames: unknown };
+    };
+    raw.design.graph = legacyGraph();
+    raw.result.designSnapshot = legacyGraph();
+    const parsed = parseRunBundle(JSON.stringify(raw));
+    expect(parsed.ok).toBe(true);
+    if (parsed.ok) {
+      expect(parsed.bundle.design.graph.edges).toStrictEqual(migratedEdges);
+      expect(parsed.bundle.result.designSnapshot.edges).toStrictEqual(migratedEdges);
+      expect(parsed.bundle.result.frames).toEqual(fixtureResult().frames);
+    }
   });
 });
 

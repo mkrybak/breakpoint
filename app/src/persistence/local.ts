@@ -1,5 +1,6 @@
 import type {
   ActionEvent,
+  ComponentKind,
   DesignEdge,
   DesignGraph,
   DesignNode,
@@ -9,7 +10,7 @@ import type {
   Verdict,
 } from "@/lib/core";
 import type { Scorecard } from "@/lib/grading";
-import { COMPONENT_KINDS } from "@/lib/registry";
+import { COMPONENT_KINDS, isSplitSource } from "@/lib/registry";
 import { parseScenario } from "@/lib/scenarios";
 import { parseScorecard, scorecardStorageKey } from "./scorecard";
 
@@ -92,7 +93,8 @@ export function loadDesign(id: string): DesignRecord | null {
  * Hand-rolled import guard (02-data-model): strict on the graph — an unknown
  * node kind would crash the canvas — forgiving on the rest, so files missing
  * M4-era fields still load with defaults. A missing or unknown `mode` loads as
- * `"practice"` (no migration).
+ * `"practice"` (no migration). Legacy edges migrate on read (T-8.3); the
+ * stored record is rewritten only by the next autosave.
  */
 export function parseDesignRecord(text: string): DesignRecord | null {
   let value: unknown;
@@ -105,7 +107,8 @@ export function parseDesignRecord(text: string): DesignRecord | null {
   if (typeof value.id !== "string" || typeof value.name !== "string") {
     return null;
   }
-  if (!isValidGraph(value.graph)) return null;
+  const graph = parseDesignGraph(value.graph);
+  if (!graph) return null;
 
   const phaseNotes = emptyPhaseNotes();
   if (isRecord(value.phaseNotes)) {
@@ -120,7 +123,7 @@ export function parseDesignRecord(text: string): DesignRecord | null {
     name: value.name,
     mode: isDesignMode(value.mode) ? value.mode : DEFAULT_DESIGN_MODE,
     scenarioId: typeof value.scenarioId === "string" ? value.scenarioId : "",
-    graph: value.graph,
+    graph,
     phaseNotes,
     actionLog: Array.isArray(value.actionLog)
       ? value.actionLog.filter(isValidActionEvent)
@@ -229,27 +232,50 @@ function isValidNode(value: unknown): value is DesignNode {
   );
 }
 
-function isValidEdge(value: unknown): value is DesignEdge {
-  if (!isRecord(value)) return false;
-  return (
-    typeof value.id === "string" &&
-    typeof value.source === "string" &&
-    typeof value.target === "string" &&
-    isFiniteNumber(value.trafficShare) &&
-    (value.autoShare === undefined || typeof value.autoShare === "boolean") &&
-    (value.kind === "sync" || value.kind === "async")
-  );
+/**
+ * Strict graph guard + edge migration (T-8.3). Nodes pass verbatim (unknown
+ * kinds reject). Each edge is rebuilt for its source's kind: split edges (lb)
+ * keep trafficShare/autoShare; call edges keep callsPerRequest, and a legacy
+ * (pre-M8) call edge's trafficShare becomes its callsPerRequest, which is the
+ * same sim math. Fields foreign to the edge's kind are dropped.
+ */
+export function parseDesignGraph(value: unknown): DesignGraph | null {
+  if (!isRecord(value)) return null;
+  const { nodes, edges, entryNodeId } = value;
+  if (!Array.isArray(nodes) || !nodes.every(isValidNode)) return null;
+  if (!Array.isArray(edges) || typeof entryNodeId !== "string") return null;
+  const kindById = new Map(nodes.map((n) => [n.id, n.kind]));
+  const parsed: DesignEdge[] = [];
+  for (const raw of edges) {
+    const edge = parseEdge(raw, kindById);
+    if (!edge) return null;
+    parsed.push(edge);
+  }
+  return { nodes, edges: parsed, entryNodeId };
 }
 
-function isValidGraph(value: unknown): value is DesignGraph {
-  if (!isRecord(value)) return false;
-  return (
-    Array.isArray(value.nodes) &&
-    value.nodes.every(isValidNode) &&
-    Array.isArray(value.edges) &&
-    value.edges.every(isValidEdge) &&
-    typeof value.entryNodeId === "string"
-  );
+function parseEdge(
+  value: unknown,
+  kindById: Map<string, ComponentKind>,
+): DesignEdge | null {
+  if (!isRecord(value)) return null;
+  const { id, source, target, kind, trafficShare, autoShare, callsPerRequest } = value;
+  if (typeof id !== "string" || typeof source !== "string" || typeof target !== "string") return null;
+  if (kind !== "sync" && kind !== "async") return null;
+  if (trafficShare !== undefined && !isFiniteNumber(trafficShare)) return null;
+  if (callsPerRequest !== undefined && !isFiniteNumber(callsPerRequest)) return null;
+  if (autoShare !== undefined && typeof autoShare !== "boolean") return null;
+  // TS doesn't narrow `unknown` through the negated literal check above
+  const base = { id, source, target, kind: kind as DesignEdge["kind"] };
+  if (isSplitSource(kindById.get(source))) {
+    return {
+      ...base,
+      ...(trafficShare !== undefined ? { trafficShare } : {}),
+      ...(autoShare !== undefined ? { autoShare } : {}),
+    };
+  }
+  const calls = callsPerRequest ?? trafficShare;
+  return { ...base, ...(calls !== undefined ? { callsPerRequest: calls } : {}) };
 }
 
 /** kind is only checked to be a string — the ActionKind union is M4's concern. */
@@ -361,15 +387,15 @@ export function exportRunBundleFile(bundle: RunBundle): void {
 
 /**
  * Guard for RunResult: strict on the design snapshot (an unknown node kind would
- * crash the replay canvas — reuses isValidGraph), forgiving on frames — they pass
+ * crash the replay canvas — reuses parseDesignGraph), forgiving on frames — they pass
  * through verbatim so an imported run replays byte-identically to the original.
  */
 function parseRunResult(value: unknown): RunResult | null {
   if (!isRecord(value)) return null;
-  const designSnapshot = value.designSnapshot;
+  const designSnapshot = parseDesignGraph(value.designSnapshot);
+  if (!designSnapshot) return null;
   const frames = value.frames;
   const verdict = value.verdict;
-  if (!isValidGraph(designSnapshot)) return null;
   if (!Array.isArray(frames)) return null;
   if (!isValidVerdict(verdict)) return null;
   return {

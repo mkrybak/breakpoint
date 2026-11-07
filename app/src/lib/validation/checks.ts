@@ -1,15 +1,18 @@
 import type { DesignGraph } from "@/lib/core";
+import { isSplitSource } from "@/lib/registry";
 import type { Check, ValidationWarning } from "./types";
 
 /** Tolerance for float drift from 0.05-step share inputs. */
 const SHARE_EPSILON = 0.001;
 
+/** Split sources (lb) only: outbound shares must sum to 1 (sync + async). Call edges never sum. */
 const checkOutboundShares: Check = (graph) => {
   const warnings: ValidationWarning[] = [];
   for (const node of graph.nodes) {
+    if (!isSplitSource(node.kind)) continue;
     const outbound = graph.edges.filter((e) => e.source === node.id);
     if (outbound.length === 0) continue;
-    const sum = outbound.reduce((acc, e) => acc + e.trafficShare, 0);
+    const sum = outbound.reduce((acc, e) => acc + (e.trafficShare ?? 1), 0);
     if (Math.abs(sum - 1) > SHARE_EPSILON) {
       warnings.push({
         code: "outbound-shares",

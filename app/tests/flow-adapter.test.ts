@@ -26,7 +26,7 @@ describe("flow-adapter", () => {
           id: "e1",
           source: "n1",
           target: "n2",
-          trafficShare: 0.5,
+          callsPerRequest: 0.5,
           kind: "async",
         },
       ],
@@ -56,7 +56,7 @@ describe("flow-adapter", () => {
         },
       ],
       edges: [
-        { id: "e1", source: "n1", target: "n2", trafficShare: 1, kind: "sync" },
+        { id: "e1", source: "n1", target: "n2", callsPerRequest: 1, kind: "sync" },
       ],
       entryNodeId: "n1",
     };
@@ -69,8 +69,8 @@ describe("flow-adapter", () => {
     expect(edges.every((e) => e.type === "flow")).toBe(true);
     expect(edges[0].selected).toBe(true);
     expect(edges[0].data).toEqual({
-      trafficShare: 1,
       kind: "sync",
+      callsPerRequest: 1,
       sourceKind: "client",
     });
   });
@@ -99,7 +99,7 @@ describe("flow-adapter", () => {
         source: "n1",
         target: "n-missing",
         animated: true,
-        data: { trafficShare: 1, kind: "sync" as const },
+        data: { kind: "sync" as const },
       },
     ];
 
@@ -211,7 +211,7 @@ describe("flow-adapter", () => {
     const edges = [{ id: "e1", source: "n1", target: "n2" }];
     const result = fromFlow(nodes, edges, "n1");
     expect(result.edges).toEqual([
-      { id: "e1", source: "n1", target: "n2", trafficShare: 1, kind: "sync" },
+      { id: "e1", source: "n1", target: "n2", kind: "sync" },
     ]);
   });
 

@@ -7,9 +7,13 @@ import {
   type EdgeProps,
 } from "@xyflow/react";
 import { edgeDashDuration, edgeWidth } from "@/components/canvas/sim-visuals";
+import { isSplitSource } from "@/lib/registry";
 import { useDesignStore } from "@/stores/design-store";
 import { useSimStore } from "@/stores/sim-store";
 import type { ComponentFlowEdge } from "@/stores/flow-adapter";
+
+/** Upper bound on the call-edge editor (T-8.3); the engine itself is unbounded. */
+const MAX_CALLS_PER_REQUEST = 100;
 
 export function FlowEdge({
   id,
@@ -33,10 +37,11 @@ export function FlowEdge({
     targetY,
     targetPosition,
   });
+  const isSplit = isSplitSource(data?.sourceKind);
   const share = data?.trafficShare ?? 1;
+  const calls = data?.callsPerRequest ?? 1;
   const kind = data?.kind ?? "sync";
-  const isLbSource = data?.sourceKind === "lb";
-  const isAuto = isLbSource && data?.autoShare !== false;
+  const isAuto = isSplit && data?.autoShare !== false;
 
   const live = rps > 0;
   const width = live ? edgeWidth(rps) : selected ? 2 : 1.5;
@@ -62,48 +67,70 @@ export function FlowEdge({
           className="absolute"
           style={{
             transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
+            // the open editor sits above nodes (React Flow paints nodes after
+            // labels), so a short edge's popover isn't hidden under its ends
+            zIndex: selected ? 1001 : undefined,
           }}
         >
           {selected ? (
             <div className="nodrag nopan pointer-events-auto flex items-center gap-1.5 rounded-lg border border-sky-400 bg-neutral-900 px-2 py-1 shadow-md">
-              <input
-                type="number"
-                min={0}
-                max={1}
-                step={0.05}
-                value={share}
-                onChange={(event) => {
-                  const next = event.target.valueAsNumber;
-                  if (Number.isNaN(next)) return;
-                  const trafficShare = Math.min(Math.max(next, 0), 1);
-                  updateEdge(
-                    id,
-                    isLbSource
-                      ? { autoShare: false, trafficShare }
-                      : { trafficShare },
-                  );
-                }}
-                aria-label="Traffic share"
-                className="w-14 rounded border border-neutral-700 bg-neutral-800 px-1 py-0.5 text-xs text-neutral-100"
-              />
-              {isLbSource && (
-                <label className="flex items-center gap-1 text-xs text-neutral-300">
+              <span className="text-[10px] uppercase tracking-wide text-neutral-500">
+                {isSplit ? "Share" : "Calls/req"}
+              </span>
+              {isSplit ? (
+                <>
                   <input
-                    type="checkbox"
-                    checked={isAuto}
-                    onChange={(event) =>
-                      updateEdge(
-                        id,
-                        event.target.checked
-                          ? { autoShare: true }
-                          : { autoShare: false, trafficShare: share },
-                      )
-                    }
-                    aria-label="Auto share"
-                    className="accent-sky-500"
+                    type="number"
+                    min={0}
+                    max={1}
+                    step={0.05}
+                    value={share}
+                    onChange={(event) => {
+                      const next = event.target.valueAsNumber;
+                      if (Number.isNaN(next)) return;
+                      const trafficShare = Math.min(Math.max(next, 0), 1);
+                      updateEdge(id, { autoShare: false, trafficShare });
+                    }}
+                    aria-label="Traffic share"
+                    className="w-14 rounded border border-neutral-700 bg-neutral-800 px-1 py-0.5 text-xs text-neutral-100"
                   />
-                  auto
-                </label>
+                  <label className="flex items-center gap-1 text-xs text-neutral-300">
+                    <input
+                      type="checkbox"
+                      checked={isAuto}
+                      onChange={(event) =>
+                        updateEdge(
+                          id,
+                          event.target.checked
+                            ? { autoShare: true }
+                            : { autoShare: false, trafficShare: share },
+                        )
+                      }
+                      aria-label="Auto share"
+                      className="accent-sky-500"
+                    />
+                    auto
+                  </label>
+                </>
+              ) : (
+                <input
+                  type="number"
+                  min={0}
+                  max={MAX_CALLS_PER_REQUEST}
+                  step={0.1}
+                  value={calls}
+                  onChange={(event) => {
+                    const next = event.target.valueAsNumber;
+                    if (Number.isNaN(next)) return;
+                    const callsPerRequest = Math.min(
+                      Math.max(next, 0),
+                      MAX_CALLS_PER_REQUEST,
+                    );
+                    updateEdge(id, { callsPerRequest });
+                  }}
+                  aria-label="Calls per request"
+                  className="w-14 rounded border border-neutral-700 bg-neutral-800 px-1 py-0.5 text-xs text-neutral-100"
+                />
               )}
               <select
                 value={kind}
@@ -121,7 +148,9 @@ export function FlowEdge({
             </div>
           ) : (
             <span className="rounded bg-neutral-900/90 px-1.5 py-0.5 font-mono text-[10px] text-neutral-400">
-              {Math.round(share * 100)}%
+              {isSplit
+                ? `${Math.round(share * 100)}%`
+                : `×${Math.round(calls * 100) / 100}`}
               {isAuto ? " · auto" : ""}
               {kind === "async" ? " · async" : ""}
             </span>

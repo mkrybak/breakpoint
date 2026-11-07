@@ -34,6 +34,7 @@ interface ComponentDef {
   latency: { baseMs: number };            // service time at low utilization
   consistency: "strong" | "eventual" | "n/a";
   scaling: "horizontal" | "vertical" | "managed";  // horizontal = user can set replicas
+  splitsTraffic?: boolean;    // lb: outbound edges split (trafficShare, Σ = 1); else calls
   configFields: ConfigField[];  // e.g. cache: hitRate slider; db: replicas, sharding
 }
 
@@ -76,9 +77,10 @@ interface DesignNode {
 interface DesignEdge {
   id: string;
   source: string; target: string;
-  trafficShare: number;       // 0–1, fraction of source's outbound on this edge
-  autoShare?: boolean;        // lb-source edges only; absent === true (auto) — T-6.1
   kind: "sync" | "async";     // async = via queue semantics, no latency on client path
+  trafficShare?: number;      // split (lb-source) edges only: 0–1, Σ = 1 per lb; absent = 1 — T-8.3
+  autoShare?: boolean;        // split edges only; absent === true (auto) — T-6.1
+  callsPerRequest?: number;   // call (every other source) edges only: calls per request; absent = 1, 0.2 = 20% — T-8.3
 }
 
 interface DesignGraph { nodes: DesignNode[]; edges: DesignEdge[]; entryNodeId: string; }
@@ -189,7 +191,7 @@ interface Scorecard {
 }
 ```
 
-localStorage autosaves the working design; export/import moves bundles between candidate and grader as files. A schema guard (zod-free, hand-rolled in `scenarios`-style) validates imports.
+localStorage autosaves the working design; export/import moves bundles between candidate and grader as files. A schema guard (zod-free, hand-rolled in `scenarios`-style) validates imports. Edges migrate on read: a non-lb edge's legacy `trafficShare` becomes `callsPerRequest` (T-8.3).
 
 Quick-mode challenge progress is per browser, not per design: `bp:challenges:solved` holds a JSON array of solved challenge scenario ids (forgiving parse, best-effort write).
 
@@ -228,3 +230,4 @@ scorecards   (id, run_id, grader_id → users, rubric_scores JSONB, feedback_md 
 - 2026-11-05 (T-7.6 planning): Quick-mode challenge progress is per browser, not per design: `bp:challenges:solved` holds a JSON array of solved challenge scenario ids (forgiving parse, best-effort write).
 - 2026-11-06 (T-8.1 planning): SimFrame per-node type named NodeFrame; queueDepth/lagSec optional, async-category only — old frames/bundles stay valid.
 - 2026-11-06 (T-8.2 planning): `Scenario.pass.maxLagSec?` (optional lag NFR) and required `SimFrame.asyncDroppedRps` / `maxLagSec`; errorRate counts client-path drops only. Rules in 03-simulation-engine Decisions (T-8.2).
+- 2026-11-06 (T-8.3 planning): split vs call edges. Which kinds split is registry data: `ComponentDef.splitsTraffic` (`true` on `lb` only), read through `registry.isSplitSource(kind)` by the engine, validation, design store, persistence and `FlowEdge`; `api_gateway` stays a call source (route mixes are fractional calls). `trafficShare`/`autoShare` (split edges) and `callsPerRequest` (call edges) are all optional; absent reads as 1, and the store writes explicit values on new edges. The persistence guard `parseDesignGraph` replaces `isValidEdge`/`isValidGraph`: it rebuilds every edge for its source kind (a legacy call edge's `trafficShare` becomes `callsPerRequest`; foreign and unknown edge keys are dropped; an edge whose source isn't a node is a call edge). Migration is on read only: stored records are rewritten by the next autosave, not on load. `scripts/sim.ts` parses through the same guard. The T-1.4 rule "sync + async both count toward the sum" now applies to split sources only; call edges never sum.

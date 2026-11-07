@@ -20,15 +20,9 @@ function node(
 function edge(
   source: string,
   target: string,
-  overrides: Partial<Pick<DesignEdge, "trafficShare" | "kind">> = {},
+  overrides: Partial<Pick<DesignEdge, "trafficShare" | "callsPerRequest" | "kind">> = {},
 ): DesignEdge {
-  return {
-    id: `e-${source}-${target}`,
-    source,
-    target,
-    trafficShare: overrides.trafficShare ?? 1,
-    kind: overrides.kind ?? "sync",
-  };
+  return { id: `e-${source}-${target}`, source, target, kind: "sync", ...overrides };
 }
 
 function graph(
@@ -153,8 +147,8 @@ describe("kill", () => {
     const g = graph(
       [node("c", "client"), node("a1"), node("a2")],
       [
-        edge("c", "a1", { trafficShare: 0.5 }),
-        edge("c", "a2", { trafficShare: 0.5 }),
+        edge("c", "a1", { callsPerRequest: 0.5 }),
+        edge("c", "a2", { callsPerRequest: 0.5 }),
       ],
     );
     const sc = scenario({
@@ -170,8 +164,8 @@ describe("kill", () => {
     const g = graph(
       [node("c", "client"), node("a1"), node("a2")],
       [
-        edge("c", "a1", { trafficShare: 0.5 }),
-        edge("c", "a2", { trafficShare: 0.5 }),
+        edge("c", "a1", { callsPerRequest: 0.5 }),
+        edge("c", "a2", { callsPerRequest: 0.5 }),
       ],
     );
     const sc = scenario({
@@ -188,8 +182,8 @@ describe("kill", () => {
     const g = graph(
       [node("c", "client"), node("a1"), node("a2")],
       [
-        edge("c", "a1", { trafficShare: 0.5 }),
-        edge("c", "a2", { trafficShare: 0.5 }),
+        edge("c", "a1", { callsPerRequest: 0.5 }),
+        edge("c", "a2", { callsPerRequest: 0.5 }),
       ],
     );
     const sc = scenario({

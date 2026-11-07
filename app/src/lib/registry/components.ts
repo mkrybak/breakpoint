@@ -23,6 +23,7 @@ export const COMPONENT_DEFS: Record<ComponentKind, ComponentDef> = {
     latency: { baseMs: 1 },
     consistency: "n/a",
     scaling: "managed",
+    splitsTraffic: true,
     configFields: [],
   },
   api_gateway: {
@@ -289,4 +290,9 @@ export const CATEGORY_ORDER: ComponentCategory[] = [
 
 export function getComponentDef(kind: ComponentKind): ComponentDef {
   return COMPONENT_DEFS[kind];
+}
+
+/** T-8.3: does this kind's outbound traffic split (trafficShare) rather than call (callsPerRequest)? undefined (unknown source) → false. */
+export function isSplitSource(kind: ComponentKind | undefined): boolean {
+  return kind !== undefined && COMPONENT_DEFS[kind].splitsTraffic === true;
 }

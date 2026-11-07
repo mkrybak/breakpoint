@@ -7,6 +7,7 @@ import type {
 } from "../src/lib/core";
 import {
   clientShares,
+  edgeMultiplier,
   flowRps,
   propagateTraffic,
   scaleFlow,
@@ -29,15 +30,9 @@ function node(
 function edge(
   source: string,
   target: string,
-  overrides: Partial<Pick<DesignEdge, "trafficShare" | "kind">> = {},
+  overrides: Partial<Pick<DesignEdge, "trafficShare" | "callsPerRequest" | "kind">> = {},
 ): DesignEdge {
-  return {
-    id: `e-${source}-${target}`,
-    source,
-    target,
-    trafficShare: overrides.trafficShare ?? 1,
-    kind: overrides.kind ?? "sync",
-  };
+  return { id: `e-${source}-${target}`, source, target, kind: "sync", ...overrides };
 }
 
 function graph(
@@ -177,6 +172,48 @@ describe("propagateTraffic", () => {
     expect(perEdge["e-lb-b"]).toEqual({ read: 500, write: 500 });
     expect(perNode["a"].demand).toEqual({ read: 500, write: 500 });
     expect(perNode["b"].demand).toEqual({ read: 500, write: 500 });
+  });
+
+  it("call edges fan out: every call carries its own multiple", () => {
+    const g = graph(
+      [node("c", "client"), node("app"), node("cache", "cache"), node("q", "queue")],
+      [
+        edge("c", "app"),
+        edge("app", "cache", { callsPerRequest: 1 }),
+        edge("app", "q", { kind: "async", callsPerRequest: 0.2 }),
+      ],
+    );
+    const { perNode, perEdge } = propagateTraffic(g, { read: 1000, write: 0 });
+    expect(perEdge["e-app-cache"]).toEqual({ read: 1000, write: 0 });
+    expect(perEdge["e-app-q"]).toEqual({ read: 200, write: 0 });
+    expect(perNode["q"].asyncArrivals).toEqual({ read: 200, write: 0 });
+  });
+
+  it("callsPerRequest > 1 multiplies", () => {
+    const g = graph(
+      [node("c", "client"), node("app"), node("db", "db_sql")],
+      [edge("c", "app"), edge("app", "db", { callsPerRequest: 3 })],
+    );
+    const { perNode } = propagateTraffic(g, { read: 1000, write: 500 });
+    expect(perNode["db"].demand).toEqual({ read: 3000, write: 1500 });
+  });
+
+  it("the engine ignores trafficShare on call edges (migration is the import's job)", () => {
+    const g = graph(
+      [node("c", "client"), node("app"), node("db", "db_sql")],
+      [edge("c", "app"), edge("app", "db", { trafficShare: 0.5 })],
+    );
+    const { perNode } = propagateTraffic(g, { read: 1000, write: 500 });
+    expect(perNode["db"].demand).toEqual({ read: 1000, write: 500 });
+  });
+
+  it("edgeMultiplier: split share on lb edges, calls per request elsewhere, absent = 1", () => {
+    expect(edgeMultiplier(edge("lb", "a", { trafficShare: 0.25 }), "lb")).toBe(0.25);
+    expect(edgeMultiplier(edge("lb", "a"), "lb")).toBe(1);
+    expect(
+      edgeMultiplier(edge("app", "q", { callsPerRequest: 0.2, trafficShare: 0.9 }), "app_server"),
+    ).toBe(0.2);
+    expect(edgeMultiplier(edge("app", "q"), "app_server")).toBe(1);
   });
 
   it("routes async edges into asyncArrivals, not sync demand", () => {

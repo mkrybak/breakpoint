@@ -38,7 +38,7 @@ function edge(source: string, target: string): DesignEdge {
     id: `e-${source}-${target}`,
     source,
     target,
-    trafficShare: 1,
+    callsPerRequest: 1,
     kind: "sync",
   };
 }

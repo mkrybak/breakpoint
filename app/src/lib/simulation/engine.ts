@@ -1,5 +1,6 @@
 import type {
   ComponentDef,
+  ComponentKind,
   DesignEdge,
   DesignGraph,
   DesignNode,
@@ -7,7 +8,7 @@ import type {
   Scenario,
   SimFrame,
 } from "@/lib/core";
-import { getComponentDef } from "@/lib/registry";
+import { getComponentDef, isSplitSource } from "@/lib/registry";
 // ./node-models imports ./engine back (Flow + config helpers). The cycle is
 // init-safe: neither module reads the other's bindings until a function runs.
 import {
@@ -219,10 +220,23 @@ export type ServeFn = (
 const serveAll: ServeFn = (_node, _def, inflow) => inflow;
 
 /**
+ * How much of a node's forwarded flow one outbound edge carries (T-8.3):
+ * split source (lb) → trafficShare, a fraction of a whole that sums to 1;
+ * any other source → callsPerRequest, calls per request served (fractional
+ * or > 1). Absent field = 1. Both multiply, so legacy shares migrate 1:1.
+ */
+export function edgeMultiplier(edge: DesignEdge, sourceKind: ComponentKind): number {
+  return isSplitSource(sourceKind)
+    ? (edge.trafficShare ?? 1)
+    : (edge.callsPerRequest ?? 1);
+}
+
+/**
  * One propagation pass (tick-loop step 2): push `offered` from the entry node
  * through the graph in topological order. Per node: inflow = sync demand +
  * async arrivals → serve → absorb read hits (hitRate) → forward the rest
- * along outbound edges by trafficShare. missed = read − read × hitRate keeps
+ * along outbound edges × edgeMultiplier (split share or calls per request).
+ * missed = read − read × hitRate keeps
  * hits + misses === reads exact.
  *
  * Flow aimed at a dead (partitioned) edge is booked in `unroutable` at the
@@ -266,7 +280,7 @@ export function propagateTraffic(
       const to = position.get(edge.target);
       // back/self edges (cycles) and edges into the entry carry nothing
       if (to === undefined || to <= (position.get(id) ?? 0)) continue;
-      const flow = scaleFlow(forwarded, edge.trafficShare);
+      const flow = scaleFlow(forwarded, edgeMultiplier(edge, node.kind));
       if (dead.has(edge.id)) {
         unroutable[id] = addFlow(unroutable[id], flow);
         continue;
@@ -464,9 +478,12 @@ export function createSimRun(
       const dead = new Set(effects.deadEdges ?? []);
       /** pull semantics: what an async node's consumers can take this tick */
       const pullRps = (id: string, mix: Flow): number => {
+        const src = nodeById.get(id);
+        if (!src) return Infinity; // no node → no consumers registered
         let limit = Infinity;
         for (const e of consumers.get(id) ?? []) {
-          if (e.trafficShare <= 0) continue;
+          const m = edgeMultiplier(e, src.kind);
+          if (m <= 0) continue;
           if (dead.has(e.id)) return 0; // nobody pulls over a cut link
           const target = nodeById.get(e.target);
           if (!target) continue;
@@ -482,7 +499,7 @@ export function createSimRun(
               : (queuedPrev.get(target.id) ?? zeroFlow());
           limit = Math.min(
             limit,
-            consumerHeadroomRps(cap, backlog, mix) / e.trafficShare,
+            consumerHeadroomRps(cap, backlog, mix) / m,
           );
         }
         return limit;

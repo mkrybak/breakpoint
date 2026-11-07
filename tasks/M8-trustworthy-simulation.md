@@ -30,7 +30,8 @@ Every task updates [[03-simulation-engine]] (spec + Decisions) and adds or adjus
 **Accept:** `errorRate` counts only drops on the sync (client) path (today all drops are summed, `engine.ts:422`). Async drops (backlog overflow) are reported separately. New optional NFR `pass.maxLagSec` with a verdict criterion. The HUD shows max consumer lag when the design has async nodes.
 
 ### T-8.3 — Split vs fan-out edges
-- [ ] T-8.3 done
+- [x] T-8.3 done
+  - Also: the open FlowEdge editor gets `zIndex 1001` so the wider popover isn't painted under nodes on short edges.
 
 **Files:** `src/lib/core/design.ts`, `src/lib/simulation/engine.ts`, `src/lib/validation/checks.ts`, `src/components/canvas/edges/FlowEdge.tsx`, `src/persistence/local.ts`, `examples/twitter.json`
 **Accept:** LB edges keep `trafficShare` (a split, which must sum to 1). Every other edge is a **call**, with `callsPerRequest` (default 1, may be fractional, e.g. 0.2 = "20% of requests enqueue a job"). The sum-to-1 warning applies only to LB sources. Import maps a legacy non-LB `trafficShare` to `callsPerRequest` (the propagation math is equivalent, since both multiply). `examples/twitter.json` (app → cache 1.0 + app → fanout 0.2) validates clean. The edge inspector labels the two kinds differently.
@@ -70,3 +71,6 @@ Every task updates [[03-simulation-engine]] (spec + Decisions) and adds or adjus
 - 2026-11-06 (T-8.2, lead call): `servedRps` is now client-facing throughput; async drops don't reduce it.
 - 2026-11-06 (T-8.2, lead review): nothing past an async node is on the client latency path (consumers pull), the same rule as for errors. Carried into the T-8.4 plan's `clientPathTerms`.
 - 2026-11-06 (T-8.2, lead call): the queue node badge shows backlog in messages, amber while buffering and red only when overloaded.
+- T-8.3: split-vs-call is registry data (ComponentDef.splitsTraffic, lb only); files beyond the list: registry, design-store, flow-adapter, starter, scripts/sim.ts (parses through persistence's migrating guard).
+- 2026-11-06 (T-8.3, lead call): split vs call is registry data (`ComponentDef.splitsTraffic`, lb only, via `isSplitSource`); api_gateway route mixes are written as fractional calls.
+- 2026-11-06 (T-8.3, lead call): legacy edges migrate on read via `parseDesignGraph`, with unknown edge keys dropped. Practice's mount-time phase-notes autosave then rewrites the record in the new shape; that's harmless.

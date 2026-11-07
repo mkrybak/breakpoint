@@ -39,7 +39,7 @@ function fixtureGraph(): DesignGraph {
         id: "e-client-lb",
         source: "n-client",
         target: "n-lb",
-        trafficShare: 1,
+        callsPerRequest: 1,
         kind: "sync" as const,
       },
       {
@@ -178,9 +178,11 @@ describe("design-store", () => {
     useDesignStore.getState().onConnect(connection);
     const { edges } = useDesignStore.getState().graph;
     expect(edges).toHaveLength(3);
-    expect(
-      edges.find((e) => e.source === "n-client" && e.target === "n-app"),
-    ).toMatchObject({ trafficShare: 1, kind: "sync" });
+    const created = edges.find(
+      (e) => e.source === "n-client" && e.target === "n-app",
+    );
+    expect(created).toMatchObject({ callsPerRequest: 1, kind: "sync" });
+    expect(created?.trafficShare).toBeUndefined();
 
     useDesignStore.getState().onConnect(connection);
     expect(useDesignStore.getState().graph.edges).toHaveLength(3);
@@ -409,7 +411,8 @@ describe("auto-balancing lb (T-6.1)", () => {
       .graph.edges.filter((e) => e.source === "n-client");
     expect(outbound).toHaveLength(2);
     for (const e of outbound) {
-      expect(e.trafficShare).toBe(1);
+      expect(e.callsPerRequest).toBe(1);
+      expect(e.trafficShare).toBeUndefined();
       expect(e.autoShare).toBeUndefined();
     }
   });

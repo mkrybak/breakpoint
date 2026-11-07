@@ -57,9 +57,9 @@ describe("scenario presets", () => {
         { id: "db", kind: "db_sql", label: "db", position: { x: 0, y: 0 }, config: { replicas: 1 } },
       ],
       edges: [
-        { id: "e1", source: "c", target: "app", trafficShare: 1, kind: "sync" },
-        { id: "e2", source: "app", target: "cache", trafficShare: 1, kind: "sync" },
-        { id: "e3", source: "cache", target: "db", trafficShare: 1, kind: "sync" },
+        { id: "e1", source: "c", target: "app", callsPerRequest: 1, kind: "sync" },
+        { id: "e2", source: "app", target: "cache", callsPerRequest: 1, kind: "sync" },
+        { id: "e3", source: "cache", target: "db", callsPerRequest: 1, kind: "sync" },
       ],
     };
     for (const preset of listScenarioPresets()) {

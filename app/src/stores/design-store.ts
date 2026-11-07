@@ -19,7 +19,7 @@ import {
   stampAction,
   type DraftAction,
 } from "@/lib/actions";
-import { getComponentDef } from "@/lib/registry";
+import { getComponentDef, isSplitSource } from "@/lib/registry";
 import {
   buildDesignRecord,
   DEFAULT_DESIGN_MODE,
@@ -67,19 +67,22 @@ interface DesignStore {
   actionSnapshots: DesignGraph[];
   onNodesChange: (changes: NodeChange<ComponentFlowNode>[]) => void;
   onEdgesChange: (changes: EdgeChange<ComponentFlowEdge>[]) => void;
-  /** Creates a sync edge; lb-source edges are auto-shared and rebalance (T-6.1); duplicate source→target is a no-op. */
+  /** Creates a sync edge: split (lb) sources get an auto share and rebalance (T-6.1), call sources get callsPerRequest 1 (T-8.3); duplicate source→target is a no-op. */
   onConnect: (connection: Connection) => void;
   /** Creates a node with registry defaults; returns its id. Used by the palette (T-1.3). */
   addNode: (kind: ComponentKind, position: { x: number; y: number }) => string;
   /**
    * Edge inspector (T-1.4): patch trafficShare, sync-async kind, and/or
-   * autoShare (T-6.1). LB-source edges rebalance after the patch, so an auto
-   * edge's trafficShare is always store-computed — to pin a share, pass
+   * autoShare (T-6.1) on split (lb) edges, or callsPerRequest on call edges
+   * (T-8.3). LB-source edges rebalance after the patch, so an auto edge's
+   * trafficShare is always store-computed — to pin a share, pass
    * autoShare: false alongside it.
    */
   updateEdge: (
     id: string,
-    patch: Partial<Pick<DesignEdge, "trafficShare" | "kind" | "autoShare">>,
+    patch: Partial<
+      Pick<DesignEdge, "trafficShare" | "autoShare" | "callsPerRequest" | "kind">
+    >,
   ) => void;
   /** Config panel (T-1.5): set one config key on a node. */
   updateNodeConfig: (
@@ -114,7 +117,7 @@ export function emptyGraph(): DesignGraph {
 }
 
 /**
- * T-6.1: recompute one LB's auto outbound shares — auto edges (autoShare !==
+ * T-6.1: recompute one split source's (lb) auto outbound shares — auto edges (autoShare !==
  * false) evenly divide max(0, 1 − Σ manual shares). No-op for non-lb sources
  * and for LBs with no auto edges, so call sites invoke it unconditionally.
  * Never called from attachDesign/importRecord/setGraph: loads and imports keep
@@ -122,13 +125,13 @@ export function emptyGraph(): DesignGraph {
  */
 export function rebalanceLb(graph: DesignGraph, sourceNodeId: string): DesignGraph {
   const node = graph.nodes.find((n) => n.id === sourceNodeId);
-  if (node?.kind !== "lb") return graph;
+  if (!isSplitSource(node?.kind)) return graph;
   const outbound = graph.edges.filter((e) => e.source === sourceNodeId);
   const autoCount = outbound.filter((e) => e.autoShare !== false).length;
   if (autoCount === 0) return graph;
   const manualSum = outbound
     .filter((e) => e.autoShare === false)
-    .reduce((acc, e) => acc + e.trafficShare, 0);
+    .reduce((acc, e) => acc + (e.trafficShare ?? 1), 0);
   const share = Math.max(0, 1 - manualSum) / autoCount;
   return {
     ...graph,
@@ -234,15 +237,15 @@ export const useDesignStore = create<DesignStore>((set) => ({
         (e) => e.source === connection.source && e.target === connection.target,
       );
       if (duplicate) return {};
-      const sourceIsLb =
-        s.graph.nodes.find((n) => n.id === connection.source)?.kind === "lb";
+      const split = isSplitSource(
+        s.graph.nodes.find((n) => n.id === connection.source)?.kind,
+      );
       const edge: DesignEdge = {
         id: crypto.randomUUID(),
         source: connection.source,
         target: connection.target,
-        trafficShare: 1,
         kind: "sync",
-        ...(sourceIsLb ? { autoShare: true } : {}),
+        ...(split ? { trafficShare: 1, autoShare: true } : { callsPerRequest: 1 }),
       };
       const graph = { ...s.graph, edges: [...s.graph.edges, edge] };
       return { graph: rebalanceLb(graph, connection.source) };

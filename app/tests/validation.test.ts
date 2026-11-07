@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { DesignEdge, DesignGraph, DesignNode } from "../src/lib/core";
 import { validateGraph } from "../src/lib/validation";
+import { parseDesignGraph } from "../src/persistence/local";
+import twitter from "../examples/twitter.json";
 
 function node(id: string, kind: DesignNode["kind"] = "app_server"): DesignNode {
   return { id, kind, label: id, position: { x: 0, y: 0 }, config: {} };
@@ -9,15 +11,9 @@ function node(id: string, kind: DesignNode["kind"] = "app_server"): DesignNode {
 function edge(
   source: string,
   target: string,
-  overrides: Partial<Pick<DesignEdge, "trafficShare" | "kind">> = {},
+  overrides: Partial<Pick<DesignEdge, "trafficShare" | "callsPerRequest" | "kind">> = {},
 ): DesignEdge {
-  return {
-    id: `e-${source}-${target}`,
-    source,
-    target,
-    trafficShare: overrides.trafficShare ?? 1,
-    kind: overrides.kind ?? "sync",
-  };
+  return { id: `e-${source}-${target}`, source, target, kind: "sync", ...overrides };
 }
 
 function graph(
@@ -61,16 +57,38 @@ describe("validateGraph", () => {
 
   it("accepts shares within epsilon of 1", () => {
     const g = graph(
-      [node("c", "client"), node("a"), node("b")],
+      [node("c", "client"), node("lb", "lb"), node("a"), node("b")],
       [
-        edge("c", "a", { trafficShare: 0.35 }),
-        edge("c", "b", { trafficShare: 0.65 }),
+        edge("c", "lb"),
+        edge("lb", "a", { trafficShare: 0.35 }),
+        edge("lb", "b", { trafficShare: 0.65 }),
       ],
       "c",
     );
     expect(
       validateGraph(g).filter((w) => w.code === "outbound-shares"),
     ).toEqual([]);
+  });
+
+  it("call sources fan out without a share warning", () => {
+    const g = graph(
+      [node("c", "client"), node("app"), node("cache", "cache"), node("q", "queue")],
+      [
+        edge("c", "app"),
+        edge("app", "cache", { callsPerRequest: 1 }),
+        edge("app", "q", { callsPerRequest: 0.2, kind: "async" }),
+      ],
+      "c",
+    );
+    expect(
+      validateGraph(g).filter((w) => w.code === "outbound-shares"),
+    ).toEqual([]);
+  });
+
+  it("examples/twitter.json validates clean", () => {
+    const g = parseDesignGraph(twitter);
+    expect(g).not.toBeNull();
+    expect(validateGraph(g!)).toEqual([]);
   });
 
   it("flags orphan nodes", () => {

@@ -10,11 +10,14 @@ export type ComponentNodeData = {
 export type ComponentFlowNode = Node<ComponentNodeData, "component">;
 
 export type FlowEdgeData = {
-  trafficShare: number;
   kind: "sync" | "async";
-  /** T-6.1: only meaningful when sourceKind is "lb"; absent === true (auto). */
+  /** Split edges (lb source) only: 0–1 share; absent reads as 1. */
+  trafficShare?: number;
+  /** T-6.1, split edges only; absent === true (auto). */
   autoShare?: boolean;
-  /** Source node's kind — lets FlowEdge branch on lb without a store lookup. */
+  /** T-8.3, call edges (every non-lb source) only; absent reads as 1. */
+  callsPerRequest?: number;
+  /** Source node's kind — sourceKind lets FlowEdge pick split vs call without a store lookup. */
   sourceKind?: ComponentKind;
 };
 
@@ -54,9 +57,10 @@ export function toFlow(
       selected: selectedEdgeIds.includes(e.id),
       markerEnd: { type: MarkerType.ArrowClosed, color: "#525252" },
       data: {
-        trafficShare: e.trafficShare,
         kind: e.kind,
+        trafficShare: e.trafficShare,
         autoShare: e.autoShare,
+        callsPerRequest: e.callsPerRequest,
         sourceKind: kindById.get(e.source),
       },
     })),
@@ -83,10 +87,15 @@ export function fromFlow(
         id: e.id,
         source: e.source,
         target: e.target,
-        trafficShare: e.data?.trafficShare ?? 1,
         kind: e.data?.kind ?? "sync",
+        ...(e.data?.trafficShare !== undefined
+          ? { trafficShare: e.data.trafficShare }
+          : {}),
         ...(e.data?.autoShare !== undefined
           ? { autoShare: e.data.autoShare }
+          : {}),
+        ...(e.data?.callsPerRequest !== undefined
+          ? { callsPerRequest: e.data.callsPerRequest }
           : {}),
       })),
     entryNodeId: resolveEntryNodeId(nodes, previousEntryNodeId),

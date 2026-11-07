@@ -1,8 +1,9 @@
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import process from "node:process";
-import type { DesignGraph, Scenario, SimFrame } from "@/lib/core";
+import type { Scenario, SimFrame } from "@/lib/core";
 import { runSimulation, TICKS_PER_SEC } from "@/lib/simulation";
+import { parseDesignGraph } from "@/persistence/local";
 
 function fail(message: string): never {
   console.error(message);
@@ -39,7 +40,9 @@ if (!graphPath || !scenarioArg) {
 const scenarioPath = scenarioArg.endsWith(".json")
   ? scenarioArg
   : join(dirname(graphPath), `${scenarioArg}.json`);
-const graph = readJson<DesignGraph>(graphPath);
+const graph =
+  parseDesignGraph(readJson<unknown>(graphPath)) ??
+  fail(`${graphPath} is not a valid design graph`);
 const scenario = readJson<Scenario>(scenarioPath);
 
 const { frames, verdict } = runSimulation(graph, scenario);

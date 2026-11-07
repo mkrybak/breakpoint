@@ -56,7 +56,7 @@
       "id": "e-client-lb",
       "source": "client",
       "target": "lb",
-      "trafficShare": 1,
+      "callsPerRequest": 1,
       "kind": "sync"
     },
     {
@@ -70,28 +70,28 @@
       "id": "e-app-cache",
       "source": "app",
       "target": "cache",
-      "trafficShare": 1,
+      "callsPerRequest": 1,
       "kind": "sync"
     },
     {
       "id": "e-cache-db",
       "source": "cache",
       "target": "db",
-      "trafficShare": 1,
+      "callsPerRequest": 1,
       "kind": "sync"
     },
     {
       "id": "e-app-fanout",
       "source": "app",
       "target": "fanout",
-      "trafficShare": 0.2,
+      "callsPerRequest": 0.2,
       "kind": "async"
     },
     {
       "id": "e-fanout-workers",
       "source": "fanout",
       "target": "workers",
-      "trafficShare": 1,
+      "callsPerRequest": 1,
       "kind": "sync"
     }
   ]

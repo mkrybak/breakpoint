@@ -57,5 +57,11 @@ export interface ComponentDef {
   latency: { baseMs: number };
   consistency: "strong" | "eventual" | "n/a";
   scaling: "horizontal" | "vertical" | "managed";
+  /**
+   * T-8.3: outbound edges are a split — each carries a trafficShare and they
+   * sum to 1 (a load balancer). Absent/false: outbound edges are calls, each
+   * with its own callsPerRequest.
+   */
+  splitsTraffic?: boolean;
   configFields: ConfigField[];
 }

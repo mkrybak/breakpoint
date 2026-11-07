@@ -4,6 +4,7 @@ import {
   COMPONENT_DEFS,
   COMPONENT_KINDS,
   getComponentDef,
+  isSplitSource,
 } from "../src/lib/registry/index";
 
 describe("registry", () => {
@@ -83,5 +84,13 @@ describe("registry", () => {
       expect(CATEGORY_ORDER, def.kind).toContain(def.category);
     }
     expect(new Set(CATEGORY_ORDER).size).toBe(CATEGORY_ORDER.length);
+  });
+
+  it("isSplitSource: only lb splits; every other kind (and unknown) calls (T-8.3)", () => {
+    expect(isSplitSource("lb")).toBe(true);
+    for (const kind of COMPONENT_KINDS.filter((k) => k !== "lb")) {
+      expect(isSplitSource(kind), kind).toBe(false);
+    }
+    expect(isSplitSource(undefined)).toBe(false);
   });
 });

@@ -9,4 +9,5 @@ export {
   COMPONENT_DEFS,
   COMPONENT_KINDS,
   getComponentDef,
+  isSplitSource,
 } from "./components";

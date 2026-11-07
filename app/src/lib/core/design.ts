@@ -13,17 +13,22 @@ export interface DesignEdge {
   id: string;
   source: string;
   target: string;
-  /** 0–1, fraction of source's outbound traffic on this edge */
-  trafficShare: number;
-  /**
-   * Only meaningful when the source node is an `lb`. When true (the default
-   * when absent), trafficShare is managed automatically: the edge takes an even
-   * slice of the share left after the LB's manually-overridden edges.
-   * Set to false when the user overrides the share by hand. (T-6.1)
-   */
-  autoShare?: boolean;
   /** async = via queue semantics, no latency on client path */
   kind: "sync" | "async";
+  /**
+   * Split edges only (source kind splitsTraffic, i.e. an lb): 0–1 fraction of
+   * the source's traffic sent down this edge; a split source's shares sum to 1.
+   * Absent reads as 1. (T-8.3)
+   */
+  trafficShare?: number;
+  /** Split edges only — T-6.1 auto-balancing; absent === true (auto). */
+  autoShare?: boolean;
+  /**
+   * Call edges only (every other source): calls to the target per request the
+   * source serves. Absent reads as 1; fractional (0.2 = 20% of requests enqueue
+   * a job) or > 1 (3 queries per request). (T-8.3)
+   */
+  callsPerRequest?: number;
 }
 
 export interface DesignGraph {

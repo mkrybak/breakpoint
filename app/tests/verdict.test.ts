@@ -32,15 +32,9 @@ function node(
 function edge(
   source: string,
   target: string,
-  overrides: Partial<Pick<DesignEdge, "trafficShare" | "kind">> = {},
+  overrides: Partial<Pick<DesignEdge, "trafficShare" | "callsPerRequest" | "kind">> = {},
 ): DesignEdge {
-  return {
-    id: `e-${source}-${target}`,
-    source,
-    target,
-    trafficShare: overrides.trafficShare ?? 1,
-    kind: overrides.kind ?? "sync",
-  };
+  return { id: `e-${source}-${target}`, source, target, kind: "sync", ...overrides };
 }
 
 function graph(

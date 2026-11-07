@@ -22,7 +22,7 @@ function node(
 }
 
 function edge(source: string, target: string): DesignEdge {
-  return { id: `e-${source}-${target}`, source, target, trafficShare: 1, kind: "sync" };
+  return { id: `e-${source}-${target}`, source, target, callsPerRequest: 1, kind: "sync" };
 }
 
 const appRoot = fileURLToPath(new URL("..", import.meta.url));
