@@ -51,7 +51,8 @@ Run UI tasks via `/ui` or `/build` (screenshots required).
 **Accept:** Clicking the p95 card opens a small popover (works on touch, replaces reliance on the native `title`) with the one-line explanation and the top 3 nodes by contribution to the tail, from T-8.7's moment fold. The first time a user who has saved designs sees the new p95 model, a one-time dismissible note says p95 is now more realistic: tails grow faster as components get busy. Errors and Lag cards get the same dotted-underline hint affordance as p95.
 
 ### T-12.6 — Replay HUD follows the scrubber
-- [ ] T-12.6 done
+- [x] T-12.6 done
+  - Also: `ReplayScrubber.tsx` untouched (the scrubber already repoints `latestFrame`); `bottleneckOf`/`displayAggregates`/`selectDisplayFrame` in `sim-store.ts`. Follow-up: Bottleneck sub prints raw util above 100% (e.g. 1610.2%).
 
 **Files:** `src/components/hud/MetricsBar.tsx`, `src/components/hud/ReplayScrubber.tsx`, `src/stores/sim-store.ts`
 **Accept:** While scrubbing a finished run, the HUD cards show the scrubbed frame's values (p95, errors, served, lag, bottleneck), matching the canvas. Releasing to the end shows the end-of-run values. "peak" subs keep showing the whole-run peak.

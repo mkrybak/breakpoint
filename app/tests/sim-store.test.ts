@@ -16,9 +16,12 @@ import {
 } from "../src/lib/simulation";
 import {
   appendLog,
+  bottleneckOf,
   describeChaos,
+  displayAggregates,
   foldAggregates,
   LOG_LIMIT,
+  selectDisplayFrame,
   setSimWorkerFactory,
   useSimStore,
   type SimAggregates,
@@ -269,6 +272,28 @@ describe("sim store", () => {
     expect(useSimStore.getState().latestFrame).toBe(frames[0]);
   });
 
+  it("the HUD view follows the scrubbed frame and keeps whole-run peaks", () => {
+    useSimStore.getState().run(small, scenario({ durationSec: 2 }));
+    vi.advanceTimersByTime(2000);
+    const order = small.nodes.map((n) => n.id);
+    const { frames, aggregates } = useSimStore.getState();
+    const view = () => {
+      const s = useSimStore.getState();
+      return displayAggregates(s.aggregates, selectDisplayFrame(s), order);
+    };
+
+    useSimStore.getState().scrubTo(3);
+    expect(view().p95Ms).toBe(frames[3].p95Ms);
+    expect(view().errorRate).toBe(frames[3].errorRate);
+    expect(view().servedRps).toBe(frames[3].servedRps);
+    expect(view().elapsedSec).toBe(frames[3].t);
+    expect(view().peakP95Ms).toBe(aggregates.peakP95Ms);
+    expect(view().peakErrorRate).toBe(aggregates.peakErrorRate);
+
+    useSimStore.getState().scrubTo(frames.length - 1);
+    expect(view()).toEqual(aggregates); // released at the end → end-of-run values
+  });
+
   it("chaos appends a log line at the current sim time", () => {
     const sc = scenario({ durationSec: 2, baseRps: 100 });
     useSimStore.getState().run(small, sc);
@@ -284,40 +309,40 @@ describe("sim store", () => {
   });
 });
 
+const zeroAgg: SimAggregates = {
+  elapsedSec: 0,
+  p95Ms: 0,
+  errorRate: 0,
+  servedRps: 0,
+  peakP95Ms: 0,
+  peakErrorRate: 0,
+  bottleneckNodeId: null,
+  bottleneckUtil: 0,
+  maxLagSec: 0,
+  peakLagSec: 0,
+  asyncLost: 0,
+};
+
+const aggFrame = (perNode: Record<string, number>) => ({
+  t: 0.1,
+  perNode: Object.fromEntries(
+    Object.entries(perNode).map(([id, util]) => [
+      id,
+      { util, queued: 0, dropped: 0, state: "ok" as const },
+    ]),
+  ),
+  perEdge: {},
+  p95Ms: 120,
+  errorRate: 0.02,
+  servedRps: 900,
+  asyncDroppedRps: 0,
+  maxLagSec: 0,
+  events: [],
+});
+
 describe("foldAggregates", () => {
-  const zero: SimAggregates = {
-    elapsedSec: 0,
-    p95Ms: 0,
-    errorRate: 0,
-    servedRps: 0,
-    peakP95Ms: 0,
-    peakErrorRate: 0,
-    bottleneckNodeId: null,
-    bottleneckUtil: 0,
-    maxLagSec: 0,
-    peakLagSec: 0,
-    asyncLost: 0,
-  };
-
-  const frame = (perNode: Record<string, number>) => ({
-    t: 0.1,
-    perNode: Object.fromEntries(
-      Object.entries(perNode).map(([id, util]) => [
-        id,
-        { util, queued: 0, dropped: 0, state: "ok" as const },
-      ]),
-    ),
-    perEdge: {},
-    p95Ms: 120,
-    errorRate: 0.02,
-    servedRps: 900,
-    asyncDroppedRps: 0,
-    maxLagSec: 0,
-    events: [],
-  });
-
   it("picks the first max-util node on ties, tracks peaks and latest", () => {
-    const a = foldAggregates(zero, frame({ x: 0.5, y: 0.5, z: 0.4 }), [
+    const a = foldAggregates(zeroAgg, aggFrame({ x: 0.5, y: 0.5, z: 0.4 }), [
       "x",
       "y",
       "z",
@@ -326,20 +351,22 @@ describe("foldAggregates", () => {
     expect(a.p95Ms).toBe(120);
     expect(a.peakP95Ms).toBe(120);
 
-    const b = foldAggregates({ ...a, peakP95Ms: 500 }, frame({ x: 0.9 }), ["x"]);
+    const b = foldAggregates({ ...a, peakP95Ms: 500 }, aggFrame({ x: 0.9 }), [
+      "x",
+    ]);
     expect(b.bottleneckNodeId).toBe("x");
     expect(b.peakP95Ms).toBe(500); // prior peak wins
   });
 
   it("tracks latest/peak consumer lag and cumulative async losses", () => {
     const a = foldAggregates(
-      zero,
-      { ...frame({}), maxLagSec: 2, asyncDroppedRps: 500 },
+      zeroAgg,
+      { ...aggFrame({}), maxLagSec: 2, asyncDroppedRps: 500 },
       [],
     );
     const b = foldAggregates(
       a,
-      { ...frame({}), maxLagSec: 1, asyncDroppedRps: 500 },
+      { ...aggFrame({}), maxLagSec: 1, asyncDroppedRps: 500 },
       [],
     );
     expect(b.maxLagSec).toBe(1);
@@ -348,19 +375,69 @@ describe("foldAggregates", () => {
   });
 
   it("folds pre-M8 frames without lag/async fields to 0", () => {
-    const old: Record<string, unknown> = { ...frame({}) };
+    const old: Record<string, unknown> = { ...aggFrame({}) };
     delete old.asyncDroppedRps;
     delete old.maxLagSec;
-    const a = foldAggregates(zero, old as unknown as SimFrame, []);
+    const a = foldAggregates(zeroAgg, old as unknown as SimFrame, []);
     expect(a.maxLagSec).toBe(0);
     expect(a.peakLagSec).toBe(0);
     expect(a.asyncLost).toBe(0);
   });
 
   it("returns a null bottleneck when there are no nodes", () => {
-    const a = foldAggregates(zero, frame({}), []);
+    const a = foldAggregates(zeroAgg, aggFrame({}), []);
     expect(a.bottleneckNodeId).toBeNull();
     expect(a.bottleneckUtil).toBe(0);
+  });
+});
+
+describe("displayAggregates", () => {
+  const run: SimAggregates = {
+    ...zeroAgg,
+    p95Ms: 700,
+    errorRate: 0.3,
+    servedRps: 1000,
+    peakP95Ms: 2300,
+    peakErrorRate: 1,
+    peakLagSec: 9,
+    asyncLost: 42,
+    maxLagSec: 5,
+    bottleneckNodeId: "y",
+    bottleneckUtil: 1,
+  };
+
+  it("returns the fold untouched with no frame (idle)", () => {
+    expect(displayAggregates(run, null, ["x"])).toBe(run);
+  });
+
+  it("takes now-scalars from the frame, peaks and asyncLost from the run", () => {
+    const f = { ...aggFrame({ x: 0.7, y: 0.2 }), maxLagSec: 1 };
+    const v = displayAggregates(run, f, ["x", "y"]);
+    expect(v).toEqual({
+      ...run,
+      elapsedSec: f.t,
+      p95Ms: 120,
+      errorRate: 0.02,
+      servedRps: 900,
+      maxLagSec: 1,
+      bottleneckNodeId: "x",
+      bottleneckUtil: 0.7,
+    });
+  });
+
+  it("reads pre-M8 frames without maxLagSec as 0 lag", () => {
+    const old: Record<string, unknown> = { ...aggFrame({}) };
+    delete old.maxLagSec;
+    expect(
+      displayAggregates(run, old as unknown as SimFrame, []).maxLagSec,
+    ).toBe(0);
+  });
+
+  it("bottleneckOf breaks ties by the order given", () => {
+    expect(bottleneckOf(aggFrame({ x: 0.5, y: 0.5 }), ["y", "x"])).toEqual({
+      nodeId: "y",
+      util: 0.5,
+    });
   });
 });
 
@@ -401,8 +478,8 @@ describe("describeChaos", () => {
     expect(describeChaos({ at: 0, rule: "flush", target: "cache" })).toBe(
       "⚡ chaos: flushed cache",
     );
-    expect(
-      describeChaos({ at: 0, rule: "spike", factor: 3, forSec: 5 }),
-    ).toBe("⚡ chaos: spike ×3");
+    expect(describeChaos({ at: 0, rule: "spike", factor: 3, forSec: 5 })).toBe(
+      "⚡ chaos: spike ×3",
+    );
   });
 });

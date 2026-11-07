@@ -64,21 +64,30 @@ function emptyAggregates(): SimAggregates {
   };
 }
 
+/** Pure: highest-util node in a frame; ties broken by `nodeOrder`; none → null/0. */
+export function bottleneckOf(
+  frame: SimFrame,
+  nodeOrder: readonly string[],
+): { nodeId: string | null; util: number } {
+  let nodeId: string | null = null;
+  let util = -1;
+  for (const id of nodeOrder) {
+    const u = frame.perNode[id]?.util ?? 0;
+    if (u > util) {
+      util = u;
+      nodeId = id;
+    }
+  }
+  return { nodeId, util: util < 0 ? 0 : util };
+}
+
 /** Pure: fold one frame into the running aggregates. */
 export function foldAggregates(
   prev: SimAggregates,
   frame: SimFrame,
   nodeOrder: readonly string[],
 ): SimAggregates {
-  let bottleneckNodeId: string | null = null;
-  let bottleneckUtil = -1;
-  for (const id of nodeOrder) {
-    const util = frame.perNode[id]?.util ?? 0;
-    if (util > bottleneckUtil) {
-      bottleneckUtil = util;
-      bottleneckNodeId = id;
-    }
-  }
+  const bottleneck = bottleneckOf(frame, nodeOrder);
   // run files exported before M8 have frames without these fields
   const lag = frame.maxLagSec ?? 0;
   return {
@@ -88,13 +97,48 @@ export function foldAggregates(
     servedRps: frame.servedRps,
     peakP95Ms: Math.max(prev.peakP95Ms, frame.p95Ms),
     peakErrorRate: Math.max(prev.peakErrorRate, frame.errorRate),
-    bottleneckNodeId,
-    bottleneckUtil: bottleneckUtil < 0 ? 0 : bottleneckUtil,
+    bottleneckNodeId: bottleneck.nodeId,
+    bottleneckUtil: bottleneck.util,
     maxLagSec: lag,
     peakLagSec: Math.max(prev.peakLagSec, lag),
     asyncLost: prev.asyncLost + (frame.asyncDroppedRps ?? 0) / TICKS_PER_SEC,
   };
 }
+
+/**
+ * Pure: the HUD's view of a run. The "now" scalars (p95, errors, served, lag,
+ * bottleneck, elapsed) come from the displayed frame: the scrubbed one during
+ * replay, else the newest. Peaks and the cumulative async loss stay whole-run.
+ * With no frame (idle) the fold is returned as-is.
+ */
+export function displayAggregates(
+  agg: SimAggregates,
+  frame: SimFrame | null,
+  nodeOrder: readonly string[],
+): SimAggregates {
+  if (frame === null) return agg;
+  const bottleneck = bottleneckOf(frame, nodeOrder);
+  return {
+    ...agg,
+    elapsedSec: frame.t,
+    p95Ms: frame.p95Ms,
+    errorRate: frame.errorRate,
+    servedRps: frame.servedRps,
+    // run files exported before M8 have frames without this field
+    maxLagSec: frame.maxLagSec ?? 0,
+    bottleneckNodeId: bottleneck.nodeId,
+    bottleneckUtil: bottleneck.util,
+  };
+}
+
+/**
+ * The frame the canvas and HUD show: the scrubbed frame during replay
+ * (`scrubTo` repoints `latestFrame`), else the newest one; null before a run.
+ * HUD readers of "the current frame" (cards, the p95 popover) use this.
+ */
+export const selectDisplayFrame = (s: {
+  latestFrame: SimFrame | null;
+}): SimFrame | null => s.latestFrame;
 
 /** Pure: append a frame's events, ring-buffered to `limit` (newest kept). */
 export function appendLog(
@@ -132,7 +176,7 @@ interface SimStore {
   status: SimStatus;
   /** the full run — every streamed frame, kept for replay (T-3.5) */
   frames: SimFrame[];
-  /** the most recent frame, for live node/edge viz (T-3.3); null before a run */
+  /** the frame on screen: newest while running, the scrubbed one during replay (see selectDisplayFrame); null before a run */
   latestFrame: SimFrame | null;
   /** derived scalar summary for the HUD (T-3.4) */
   aggregates: SimAggregates;

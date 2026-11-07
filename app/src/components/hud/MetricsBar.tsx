@@ -29,7 +29,11 @@ import {
 } from "@/persistence/notices";
 import { useDesignStore } from "@/stores/design-store";
 import { useScenarioStore } from "@/stores/scenario-store";
-import { useSimStore } from "@/stores/sim-store";
+import {
+  displayAggregates,
+  selectDisplayFrame,
+  useSimStore,
+} from "@/stores/sim-store";
 
 const BTN =
   "flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium";
@@ -43,9 +47,15 @@ export type HudVariant = "full" | "simple";
 /** Shared run state + controls for both HUD variants. */
 function useRunControls() {
   const status = useSimStore((s) => s.status);
-  const agg = useSimStore((s) => s.aggregates);
+  const runAgg = useSimStore((s) => s.aggregates);
+  const frame = useSimStore(selectDisplayFrame);
   const runGraph = useSimStore((s) => s.runGraph);
-  const frame = useSimStore((s) => s.latestFrame);
+  // scrubbed frame during replay, newest while running; peaks stay whole-run
+  const agg = displayAggregates(
+    runAgg,
+    frame,
+    runGraph?.nodes.map((n) => n.id) ?? [],
+  );
   // runGraph is null when idle, so the idle HUD follows the live design
   const hasAsync = useDesignStore((s) => hasAsyncNodes(runGraph ?? s.graph));
   const run = useSimStore((s) => s.run);
