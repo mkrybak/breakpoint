@@ -412,7 +412,7 @@ describe("simulate — golden 4: spike drain", () => {
 });
 
 describe("simulate — latency path", () => {
-  it("weights downstream latency by forwarded traffic (cache absorbs hits)", () => {
+  it("a cache's DB call charges only misses + writes (3600/10000), not callsPerRequest", () => {
     const g = graph(
       [
         node("c", "client"),
@@ -430,6 +430,68 @@ describe("simulate — latency path", () => {
     const dbMs = 5 / (1 - 2000 / 15000); // write-bound: 2000 vs 15k ceiling
     expect(frames[0].p95Ms).toBe(1.6 * (1 + (cacheMs + (3600 / 10000) * dbMs)));
     expect(frames[0].perEdge["e-cache-db"].rps).toBe(3600);
+  });
+
+  it("golden: an app calling a cache and then a DB sequentially pays both", () => {
+    const g = graph(
+      [node("c", "client"), node("app"), node("cache", "cache"), node("db", "db_sql")],
+      [edge("c", "app"), edge("app", "cache"), edge("app", "db")],
+    );
+    const [f] = simulate(g, scenario({ durationSec: 0.1, readRatio: 1 }));
+    const appMs = 8 / (1 - 0.5); // 2000 / 4000
+    const cacheMs = 1 / (1 - 2000 / 100000);
+    const dbMs = 5 / (1 - 2000 / 30000);
+    expect(f.p95Ms).toBe(1.6 * (1 + ((appMs + cacheMs) + dbMs))); // 37.404…
+    // the pre-M8 average (0.5/0.5 shares) would have paid half of each
+    expect(f.p95Ms).toBeGreaterThan(1.6 * (1 + appMs + 0.5 * cacheMs + 0.5 * dbMs));
+  });
+
+  it("a fractional call pays its fraction (cache-aside: 20% of requests hit the DB)", () => {
+    const g = graph(
+      [node("c", "client"), node("app"), node("cache", "cache"), node("db", "db_sql")],
+      [edge("c", "app"), edge("app", "cache"), edge("app", "db", { callsPerRequest: 0.2 })],
+    );
+    const [f] = simulate(g, scenario({ durationSec: 0.1, readRatio: 1 }));
+    const appMs = 8 / (1 - 0.5);
+    const cacheMs = 1 / (1 - 2000 / 100000);
+    const dbMs = 5 / (1 - 400 / 30000);
+    expect(f.perEdge["e-app-db"].rps).toBe(400);
+    expect(f.p95Ms).toBe(1.6 * (1 + ((appMs + cacheMs) + (400 / 2000) * dbMs))); // 30.454…
+  });
+
+  it("an LB split averages its backends", () => {
+    const g = graph(
+      [node("c", "client"), node("lb", "lb"), node("a"), node("b")],
+      [edge("c", "lb"), edge("lb", "a", { trafficShare: 0.5 }), edge("lb", "b", { trafficShare: 0.5 })],
+    );
+    const [f] = simulate(g, scenario({ durationSec: 0.1, readRatio: 1 }));
+    const lbMs = 1 / (1 - 2000 / 100000);
+    const backendMs = 8 / (1 - 1000 / 4000);
+    expect(f.p95Ms).toBe(1.6 * (1 + ((lbMs + 0.5 * backendMs) + 0.5 * backendMs))); // 20.299…
+  });
+
+  it("an LB with a partitioned backend charges the live backend in full", () => {
+    const g = graph(
+      [node("c", "client"), node("lb", "lb"), node("a"), node("b")],
+      [edge("c", "lb"), edge("lb", "a", { trafficShare: 0.5 }), edge("lb", "b", { trafficShare: 0.5 })],
+    );
+    const cut: ApplyRulesFn = (_t, s) => ({ offeredRps: s.baseRps, deadEdges: ["e-lb-b"] });
+    const [f] = simulate(g, scenario({ durationSec: 0.1, readRatio: 1 }), cut);
+    const lbMs = 1 / (1 - 2000 / 100000);
+    const backendMs = 8 / (1 - 1000 / 4000);
+    expect(f.perEdge["e-lb-b"].rps).toBe(0);
+    expect(f.p95Ms).toBe(1.6 * (1 + (lbMs + backendMs))); // 20.299…; pre-T-8.4: 11.766
+  });
+
+  it("a dead (partitioned) call adds no latency", () => {
+    const g = graph(
+      [node("c", "client"), node("app"), node("db", "db_sql")],
+      [edge("c", "app"), edge("app", "db")],
+    );
+    const cut: ApplyRulesFn = (_t, s) => ({ offeredRps: s.baseRps, deadEdges: ["e-app-db"] });
+    const [f] = simulate(g, scenario({ durationSec: 0.1, readRatio: 1 }), cut);
+    expect(f.perEdge["e-app-db"].rps).toBe(0);
+    expect(f.p95Ms).toBe(1.6 * (1 + 8 / (1 - 0.5))); // 27.2
   });
 
   it("keeps async subtrees off the client latency path", () => {

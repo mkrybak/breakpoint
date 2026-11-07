@@ -375,47 +375,78 @@ const steadyBaseLoad: ApplyRulesFn = (_tickIndex, scenario) => ({
   offeredRps: scenario.baseRps,
 });
 
+/** One sync child on a node's client path. */
+export interface PathTerm {
+  target: string;
+  /**
+   * Share of the source's requests that pay the target's path latency.
+   * call (non-LB source): flow(e) / served(source) = callsPerRequest ×
+   *   pass-through (a cache passes only misses + writes) — calls ADD.
+   * split (LB source): flow(e) / Σ flow over its forward sync edges —
+   *   backends AVERAGE over live edges.
+   */
+  weight: number;
+}
+
 /**
- * Mean client-visible latency (tick-loop step 4): a node contributes its own
- * latencyMs plus the traffic-weighted latency of its sync downstream —
- * weight = edge flow / the node's served total, so a cache shortens the path
- * by exactly the traffic it absorbs. Async edges are off the client path
- * (queues absorb bursts; their delay shows as the queue's lagSec, not p95).
- * Edges leaving an async node are off the client path too, whatever their
- * kind: consumers pull, so the client never waits on them — a queue's own
- * path latency is its enqueue cost (T-8.2). Back/self edges are skipped with
- * the same rule propagation uses.
+ * Client-path weights per reachable node (tick-loop step 4), separate from
+ * the fold so tail models (T-8.7) reuse them. Sync forward edges only, in
+ * graph.edges order; dead edges stay with weight 0 (flow 0). Weights are
+ * flow-derived, never edge.callsPerRequest, so cache hits never pay the DB.
  */
-function meanPathMs(
+export function clientPathTerms(
   graph: DesignGraph,
   prop: PropagationResult,
-  outputs: Map<string, NodeModelOutput>,
-): number {
+  outputs: ReadonlyMap<string, NodeModelOutput>,
+): Map<string, PathTerm[]> {
   const position = new Map(prop.order.map((id, i) => [id, i]));
-  const asyncIds = new Set(
-    graph.nodes
-      .filter((n) => getComponentDef(n.kind).category === "async")
-      .map((n) => n.id),
-  );
+  const nodeById = new Map(graph.nodes.map((n) => [n.id, n]));
+  const terms = new Map<string, PathTerm[]>();
+  prop.order.forEach((id, i) => {
+    const node = nodeById.get(id);
+    const out = outputs.get(id);
+    if (!node || !out) return;
+    // T-8.2 (lead): consumers pull from a queue/stream, so nothing past an async node is on the client path
+    const asyncSource = getComponentDef(node.kind).category === "async";
+    const edges = graph.edges.filter((edge) => {
+      if (asyncSource || edge.source !== id || edge.kind === "async") return false;
+      const to = position.get(edge.target);
+      return to !== undefined && to > i;
+    });
+    const flows = edges.map((edge) => flowRps(prop.perEdge[edge.id]));
+    const denominator = isSplitSource(node.kind)
+      ? flows.reduce((sum, f) => sum + f, 0)
+      : flowRps(out.served);
+    terms.set(
+      id,
+      edges.map((edge, k) => ({
+        target: edge.target,
+        weight: denominator > 0 ? flows[k] / denominator : 0,
+      })),
+    );
+  });
+  return terms;
+}
+
+/**
+ * Mean client-visible latency (tick-loop step 4): reverse topo order,
+ * path(n) = latencyMs(n) + Σ weight × path(target) over clientPathTerms.
+ * Sequential calls sum; LB splits average; async/dead edges add nothing.
+ */
+export function meanPathMs(
+  graph: DesignGraph,
+  prop: PropagationResult,
+  outputs: ReadonlyMap<string, NodeModelOutput>,
+): number {
+  const terms = clientPathTerms(graph, prop, outputs);
   const pathMs = new Map<string, number>();
   for (let i = prop.order.length - 1; i >= 0; i--) {
     const id = prop.order[i];
     const out = outputs.get(id);
     if (!out) continue;
-    const servedTotal = flowRps(out.served);
     let ms = out.latencyMs;
-    // consumers pull from an async node: nothing past it is client latency
-    if (asyncIds.has(id)) {
-      pathMs.set(id, ms);
-      continue;
-    }
-    for (const edge of graph.edges) {
-      if (edge.source !== id || edge.kind === "async") continue;
-      const to = position.get(edge.target);
-      if (to === undefined || to <= i) continue;
-      const weight =
-        servedTotal > 0 ? flowRps(prop.perEdge[edge.id]) / servedTotal : 0;
-      ms += weight * (pathMs.get(edge.target) ?? 0);
+    for (const term of terms.get(id) ?? []) {
+      ms += term.weight * (pathMs.get(term.target) ?? 0);
     }
     pathMs.set(id, ms);
   }

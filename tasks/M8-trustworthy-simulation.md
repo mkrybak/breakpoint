@@ -37,7 +37,7 @@ Every task updates [[03-simulation-engine]] (spec + Decisions) and adds or adjus
 **Accept:** LB edges keep `trafficShare` (a split, which must sum to 1). Every other edge is a **call**, with `callsPerRequest` (default 1, may be fractional, e.g. 0.2 = "20% of requests enqueue a job"). The sum-to-1 warning applies only to LB sources. Import maps a legacy non-LB `trafficShare` to `callsPerRequest` (the propagation math is equivalent, since both multiply). `examples/twitter.json` (app → cache 1.0 + app → fanout 0.2) validates clean. The edge inspector labels the two kinds differently.
 
 ### T-8.4 — Sequential calls add latency
-- [ ] T-8.4 done
+- [x] T-8.4 done
 
 **Files:** `src/lib/simulation/engine.ts` (`meanPathMs`), `tests/engine.test.ts`
 **Accept:** A node's client-path latency = own latency + the **sum** of its sync calls' latencies, weighted by `callsPerRequest`. Today it's a traffic-weighted *average*, which is right only for LB splits, and LB edges keep the average. Golden test: an app calling a cache and then a DB sequentially pays both.
@@ -74,3 +74,5 @@ Every task updates [[03-simulation-engine]] (spec + Decisions) and adds or adjus
 - T-8.3: split-vs-call is registry data (ComponentDef.splitsTraffic, lb only); files beyond the list: registry, design-store, flow-adapter, starter, scripts/sim.ts (parses through persistence's migrating guard).
 - 2026-11-06 (T-8.3, lead call): split vs call is registry data (`ComponentDef.splitsTraffic`, lb only, via `isSplitSource`); api_gateway route mixes are written as fractional calls.
 - 2026-11-06 (T-8.3, lead call): legacy edges migrate on read via `parseDesignGraph`, with unknown edge keys dropped. Practice's mount-time phase-notes autosave then rewrites the record in the new shape; that's harmless.
+- T-8.4: call-edge math was already a sum once T-8.3 multiplies by callsPerRequest; the code change is LB splits normalizing over live split flow (partitioned backend no longer flatters p95) + the clientPathTerms/meanPathMs seam for T-8.7.
+- 2026-11-06 (T-8.4, lead call): an LB split averages over its *live* backends (denominator = live split flow, not served(lb)), so a partitioned backend no longer halves p95 (11.77 → 20.30 ms); calls are sequential (no parallel fan-out max).
