@@ -241,7 +241,17 @@ export const COMPONENT_DEFS: Record<ComponentKind, ComponentDef> = {
     latency: { baseMs: 4 },
     consistency: "n/a",
     scaling: "managed",
-    configFields: [],
+    configFields: [
+      {
+        key: "retentionMsgs",
+        label: "Retention (messages)",
+        type: "number",
+        min: 1000,
+        max: 100000000,
+        step: 1000,
+        default: 1000000,
+      },
+    ],
   },
   stream: {
     kind: "stream",
@@ -253,7 +263,17 @@ export const COMPONENT_DEFS: Record<ComponentKind, ComponentDef> = {
     latency: { baseMs: 4 },
     consistency: "n/a",
     scaling: "managed",
-    configFields: [],
+    configFields: [
+      {
+        key: "retentionMsgs",
+        label: "Retention (messages)",
+        type: "number",
+        min: 1000,
+        max: 100000000,
+        step: 1000,
+        default: 1000000,
+      },
+    ],
   },
 };
 

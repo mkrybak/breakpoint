@@ -1,4 +1,5 @@
 export type {
+  NodeFrame,
   NodeState,
   RunResult,
   Scenario,

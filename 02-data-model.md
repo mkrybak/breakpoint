@@ -53,7 +53,7 @@ Seed registry values (from the numbers-to-know cheat sheet):
 | db_sql | 30 000 read | 15 000 | 5 | single primary; replicas add read capacity |
 | db_nosql | 50 000 | 30 000 | 3 | horizontal, eventual by default |
 | cache | 100 000 | 100 000 | 1 | hitRate config 0–0.95 |
-| queue/stream | 800 000 | — | 4 | adds delivery latency, absorbs bursts |
+| queue/stream | 800 000 | — | 4 | adds delivery latency, absorbs bursts; retentionMsgs config (default 1M) |
 | lb | 100 000 | — | 1 | — |
 | cdn | ∞ | — | 15 | hitRate config; only for static/read edges |
 | blob | ∞ | — | 50 | — |
@@ -116,7 +116,8 @@ interface Scenario {
 ```ts
 interface SimFrame {           // one per tick (100ms), streamed worker → UI
   t: number;
-  perNode: Record<string, { util: number; queued: number; dropped: number; state: "ok"|"hot"|"saturated"|"overloaded"|"down" }>;
+  perNode: Record<string, { util: number; queued: number; dropped: number; state: "ok"|"hot"|"saturated"|"overloaded"|"down";
+                            queueDepth?: number; lagSec?: number }>;   // NodeFrame; queueDepth (msgs) / lagSec async nodes only
   perEdge: Record<string, { rps: number }>;
   p95Ms: number; errorRate: number; servedRps: number;
   events: string[];            // log lines emitted this tick
@@ -222,3 +223,4 @@ scorecards   (id, run_id, grader_id → users, rubric_scores JSONB, feedback_md 
 - 2026-07-19 (T-6.1 planning): auto-balancing LB — `DesignEdge` gains optional `autoShare` (absent === true; only meaningful on `lb`-source edges). `trafficShare` stays a materialized number: the design store's `rebalanceLb` writes real values on edits (`onConnect`/`onEdgesChange`/`onNodesChange`/`updateEdge`), never on load/import — so `engine.ts` (`propagateTraffic`) and `checks.ts` (`checkOutboundShares`) are untouched. Node deletion cascades dangling edges inside `fromFlow`, not via `onEdgesChange`, so `onNodesChange` rebalances affected LBs itself. `local.ts` `isValidEdge` accepts an optional boolean `autoShare` — no migration; `flow-adapter` round-trips `autoShare` and threads a derived `sourceKind` to `FlowEdge`.
 - 2026-11-05 (T-7.2 planning): `DesignRecord.mode: DesignMode` ("quick" | "practice" | "interview", shell type in `persistence/local.ts`, never in `src/lib/**`). `parseDesignRecord` loads a missing or unknown mode as "practice" (no migration, stored records aren't rewritten). `buildDesignRecord(id, name, graph, mode, phaseNotes?, actionLog?)`: mode is required so no save path can silently default it. design-store holds `designMode`, set only by `attachDesign`; in-place `importRecord` keeps it (importing never converts a mode). Imports that create a design (review-screen bundle import, any future landing import) keep the file's parsed mode.
 - 2026-11-05 (T-7.6 planning): Quick-mode challenge progress is per browser, not per design: `bp:challenges:solved` holds a JSON array of solved challenge scenario ids (forgiving parse, best-effort write).
+- 2026-11-06 (T-8.1 planning): SimFrame per-node type named NodeFrame; queueDepth/lagSec optional, async-category only — old frames/bundles stay valid.

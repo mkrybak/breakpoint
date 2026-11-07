@@ -57,7 +57,7 @@ Each engine grows by **adding a data entry or a map entry**, never by editing a 
 | To add... | Touch only |
 |---|---|
 | New component (e.g. websocket gateway) | `registry/components.ts` — one ComponentDef. Palette, canvas node, and simulation pick it up automatically |
-| New node behavior (kind needs custom math) | `simulation/node-models.ts` — register in the `modelByKind` map |
+| New node behavior (kind needs custom math) | `simulation/node-models.ts` — register in the `modelByKind` map; custom capacity math also registers in capacityByKind (queue pull reads consumers' capacity). Async-category kinds default to bufferModel. |
 | New stress rule (e.g. `disk-full`) | `simulation/rules.ts` — register in the `ruleAppliers` map + add to the StressRule union |
 | New verdict check | `simulation/verdict.ts` — push a `Criterion` into the criteria list |
 | New validation warning | `validation/` — push a `Check` into the checks list |

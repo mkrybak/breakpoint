@@ -8,6 +8,10 @@ import {
   type Flow,
 } from "../src/lib/simulation/engine";
 import {
+  bufferModel,
+  consumerHeadroomRps,
+  consumerLagSec,
+  defaultModel,
   formatRps,
   getNodeModel,
   transitionEvent,
@@ -252,5 +256,126 @@ describe("latency (M/M/1 + queue wait)", () => {
 
   it("a down node reports baseMs — its traffic drops, latency is moot", () => {
     expect(tick(node("app"), { read: 1000, write: 0 }, 0).latencyMs).toBe(8);
+  });
+});
+
+describe("buffer model — async nodes (T-8.1)", () => {
+  function run(
+    n: DesignNode,
+    inflow: Flow,
+    queuedPrev: Flow,
+    drainRps?: number,
+    aliveFraction = 1,
+  ): NodeModelOutput {
+    return bufferModel({
+      node: n,
+      def: getComponentDef(n.kind),
+      inflow,
+      queuedPrev,
+      aliveFraction,
+      ...(drainRps !== undefined ? { drainRps } : {}),
+    });
+  }
+
+  it("async kinds get the buffer model; others keep the default", () => {
+    expect(getNodeModel("queue")).toBe(bufferModel);
+    expect(getNodeModel("stream")).toBe(bufferModel);
+    expect(getNodeModel("worker")).toBe(defaultModel);
+  });
+
+  it("serves only what consumers pull and carries the rest", () => {
+    const out = run(
+      node("q", "queue"),
+      { read: 4500, write: 0 },
+      { read: 2500, write: 0 },
+      2000,
+    );
+    expect(out.served).toEqual({ read: 2000, write: 0 });
+    expect(out.queued).toEqual({ read: 5000, write: 0 });
+    expect(out.dropped).toBe(0);
+    expect(out.state).toBe("ok");
+  });
+
+  it("a sink queue (no drain limit) serves everything", () => {
+    const out = run(node("q", "queue"), { read: 4500, write: 0 }, zeroFlow());
+    expect(out.served).toEqual({ read: 4500, write: 0 });
+    expect(out.queued).toEqual(zeroFlow());
+  });
+
+  it("drops backlog beyond retention and goes overloaded", () => {
+    const out = run(
+      node("q", "queue", { retentionMsgs: 1000 }),
+      { read: 5000, write: 0 },
+      { read: 10000, write: 0 },
+      0,
+    );
+    expect(out.queued).toEqual({ read: 10000, write: 0 });
+    expect(out.dropped).toBe(5000);
+    expect(out.util).toBe(1.5);
+    expect(out.state).toBe("overloaded");
+  });
+
+  it("declares retentionMsgs in the registry", () => {
+    const field = getComponentDef("queue").configFields.find(
+      (f) => f.key === "retentionMsgs",
+    );
+    expect(field).toMatchObject({ type: "number", default: 1_000_000 });
+  });
+
+  it("latency is the enqueue cost only — no queue-wait term", () => {
+    const out = run(
+      node("q", "queue"),
+      { read: 8000, write: 0 },
+      { read: 1e6, write: 0 },
+      0,
+    );
+    expect(out.latencyMs).toBe(4 / (1 - 8000 / 800000));
+  });
+
+  it("a down queue retains nothing and drops everything", () => {
+    const out = run(
+      node("q", "queue"),
+      { read: 1000, write: 0 },
+      { read: 500, write: 0 },
+      undefined,
+      0,
+    );
+    expect(out.served).toEqual(zeroFlow());
+    expect(out.queued).toEqual(zeroFlow());
+    expect(out.dropped).toBe(1500);
+    expect(out.state).toBe("down");
+  });
+});
+
+describe("consumerHeadroomRps", () => {
+  it("non-split capacity minus the consumer's own backlog, floored at 0", () => {
+    const cap = { readRps: 2000, writeRps: 2000, split: false };
+    expect(consumerHeadroomRps(cap, { read: 500, write: 0 }, { read: 1, write: 0 })).toBe(1500);
+    expect(consumerHeadroomRps(cap, { read: 3000, write: 0 }, { read: 1, write: 0 })).toBe(0);
+  });
+
+  it("split capacity binds on whichever direction fills first", () => {
+    const cap = { readRps: 30000, writeRps: 15000, split: true };
+    expect(consumerHeadroomRps(cap, zeroFlow(), { read: 1, write: 1 })).toBe(30000);
+    expect(consumerHeadroomRps(cap, zeroFlow(), { read: 1, write: 0 })).toBe(30000);
+  });
+
+  it("unlimited capacity is unlimited headroom", () => {
+    const cap = { readRps: Infinity, writeRps: Infinity, split: false };
+    expect(consumerHeadroomRps(cap, zeroFlow(), { read: 1, write: 0 })).toBe(Infinity);
+  });
+});
+
+describe("consumerLagSec", () => {
+  it("is 0 with no backlog", () => {
+    expect(consumerLagSec(0, 0, 5)).toBe(0);
+  });
+
+  it("is depth ÷ drain rate while consumers drain", () => {
+    expect(consumerLagSec(7500, 2000, 0)).toBe(3.75);
+  });
+
+  it("ages one tick when nothing drains", () => {
+    expect(consumerLagSec(100, 0, 0.2)).toBeCloseTo(0.3, 12);
   });
 });

@@ -15,6 +15,7 @@ import {
   zeroFlow,
   type ApplyRulesFn,
 } from "../src/lib/simulation/engine";
+import { compileRules } from "../src/lib/simulation/rules";
 
 function node(
   id: string,
@@ -405,9 +406,15 @@ describe("simulate — latency path", () => {
       g,
       scenario({ durationSec: 0.1, baseRps: 2000, readRatio: 0 }),
     );
-    // the 1k-cap worker is overloaded, but only the sync path counts
-    expect(frames[0].perNode["w"].state).toBe("overloaded");
-    expect(frames[0].errorRate).toBe(500 / 2000);
+    // the queue hands the 1k-cap worker only what it can take; the rest waits
+    expect(frames[0].perNode["w"].state).toBe("saturated");
+    expect(frames[0].perNode["q"]).toMatchObject({
+      queued: 1000,
+      dropped: 0,
+      queueDepth: 100,
+      lagSec: 0.1,
+    });
+    expect(frames[0].errorRate).toBe(0);
     expect(frames[0].p95Ms).toBe(1.6 * (1 + 8 / (1 - 0.5)));
   });
 
@@ -424,6 +431,111 @@ describe("simulate — latency path", () => {
     expect(frames[0].p95Ms).toBe(0);
     expect(frames[0].servedRps).toBe(0);
     expect(frames[0].errorRate).toBe(0);
+  });
+});
+
+describe("simulate — golden 6: queues buffer (T-8.1)", () => {
+  const g = graph(
+    [
+      node("c", "client"),
+      node("app", "app_server", { replicas: 5 }),
+      node("q", "queue"),
+      node("w", "worker", { replicas: 2 }),
+    ],
+    [edge("c", "app"), edge("app", "q", { kind: "async" }), edge("q", "w")],
+  );
+  const sc = scenario({
+    durationSec: 30,
+    baseRps: 1500,
+    timeline: [{ at: 5, rule: "spike", factor: 3, forSec: 3 }],
+  });
+  const frames = simulate(g, sc, compileRules(g, sc));
+  const q = frames.map((f) => f.perNode["q"]);
+  const w = frames.map((f) => f.perNode["w"]);
+
+  it("a ×3 spike into a queue costs zero errors anywhere", () => {
+    expect(frames).toHaveLength(300);
+    expect(frames.every((f) => f.errorRate === 0)).toBe(true);
+    expect(
+      frames.every((f) => Object.values(f.perNode).every((n) => n.dropped === 0)),
+    ).toBe(true);
+  });
+
+  it("workers run saturated, never overloaded, while the backlog drains", () => {
+    expect(Math.max(...w.map((n) => n.util))).toBe(1);
+    expect(w[49].state).toBe("hot");
+    expect(w[50].state).toBe("saturated");
+    expect(w[229].state).toBe("saturated");
+    expect(w[230].state).toBe("hot");
+    expect(frames[50].events).toEqual(["w saturated at 2k RPS"]);
+    expect(frames[230].events).toEqual(["w running hot"]);
+  });
+
+  it("backlog grows through the spike, then drains to 0", () => {
+    const depth = q.map((n) => n.queueDepth);
+    expect(depth[49]).toBe(0);
+    expect(depth[50]).toBe(250);
+    expect(depth[79]).toBe(7500);
+    expect(Math.max(...depth.map((d) => d ?? 0))).toBe(7500);
+    expect(depth[80]).toBe(7450);
+    expect(depth[228]).toBe(50);
+    expect(depth[229]).toBe(0);
+    expect(depth.slice(229).every((d) => d === 0)).toBe(true);
+  });
+
+  it("consumer lag peaks at the end of the spike and returns to 0", () => {
+    const lag = q.map((n) => n.lagSec);
+    expect(lag[50]).toBe(0.125);
+    expect(lag[79]).toBe(3.75);
+    expect(Math.max(...lag.map((l) => l ?? 0))).toBe(3.75);
+    expect(lag[229]).toBe(0);
+    expect(lag[299]).toBe(0);
+  });
+
+  it("queueDepth/lagSec appear on async nodes only", () => {
+    expect("queueDepth" in frames[0].perNode["app"]).toBe(false);
+    expect("lagSec" in frames[0].perNode["w"]).toBe(false);
+    expect(frames[0].perNode["q"]).toMatchObject({ queueDepth: 0, lagSec: 0 });
+  });
+});
+
+describe("simulate — queue with no one pulling", () => {
+  const g = graph(
+    [node("c", "client"), node("q", "queue"), node("w", "worker")],
+    [edge("c", "q", { kind: "async" }), edge("q", "w")],
+  );
+
+  it("a down consumer pauses the drain: backlog holds and ages", () => {
+    const rules: ApplyRulesFn = (t, s) => ({
+      offeredRps: s.baseRps,
+      aliveFraction: t >= 2 ? { w: 0 } : ({} as Record<string, number>),
+    });
+    const frames = simulate(
+      g,
+      scenario({ durationSec: 0.5, baseRps: 500 }),
+      rules,
+    );
+    const q = frames.map((f) => f.perNode["q"]);
+    expect(q.map((n) => n.queueDepth)).toEqual([0, 0, 50, 100, 150]);
+    expect(q[2].lagSec).toBeCloseTo(0.1, 12);
+    expect(q[4].lagSec).toBeCloseTo(0.3, 12);
+    expect(frames.map((f) => f.errorRate)).toEqual([0, 0, 0, 0, 0]);
+    expect(frames[2].perNode["w"].state).toBe("down");
+  });
+
+  it("a cut consumer edge holds the backlog instead of dropping it", () => {
+    const rules: ApplyRulesFn = (t, s) => ({
+      offeredRps: s.baseRps,
+      deadEdges: t === 1 ? ["e-q-w"] : [],
+    });
+    const frames = simulate(
+      g,
+      scenario({ durationSec: 0.3, baseRps: 500 }),
+      rules,
+    );
+    expect(frames.map((f) => f.perNode["q"].queueDepth)).toEqual([0, 50, 0]);
+    expect(frames.map((f) => f.perEdge["e-q-w"].rps)).toEqual([500, 0, 1000]);
+    expect(frames.map((f) => f.errorRate)).toEqual([0, 0, 0]);
   });
 });
 

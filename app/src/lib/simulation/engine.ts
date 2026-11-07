@@ -11,6 +11,9 @@ import { getComponentDef } from "@/lib/registry";
 // ./node-models imports ./engine back (Flow + config helpers). The cycle is
 // init-safe: neither module reads the other's bindings until a function runs.
 import {
+  consumerHeadroomRps,
+  consumerLagSec,
+  getCapacityFn,
   getNodeModel,
   transitionEvent,
   type NodeModelOutput,
@@ -181,7 +184,7 @@ export function topoSort(graph: DesignGraph): string[] {
 export interface NodeTraffic {
   /** sync inbound arriving this tick — the client-latency path */
   demand: Flow;
-  /** arrivals via async edges — queue semantics, off the sync latency path */
+  /** arrivals via async edges — queue semantics, off the sync latency path (wait shows as the queue's lagSec) */
   asyncArrivals: Flow;
 }
 
@@ -319,7 +322,7 @@ const steadyBaseLoad: ApplyRulesFn = (_tickIndex, scenario) => ({
  * latencyMs plus the traffic-weighted latency of its sync downstream —
  * weight = edge flow / the node's served total, so a cache shortens the path
  * by exactly the traffic it absorbs. Async edges are off the client path
- * (queues absorb bursts; their delay shows in node metrics, not p95).
+ * (queues absorb bursts; their delay shows as the queue's lagSec, not p95).
  * Back/self edges are skipped with the same rule propagation uses.
  */
 function meanPathMs(
@@ -378,6 +381,19 @@ export function createSimRun(
   const prevState = new Map<string, NodeState>(
     graph.nodes.map((n) => [n.id, "ok"]),
   );
+  const prevLag = new Map<string, number>();
+  const nodeById = new Map(graph.nodes.map((n) => [n.id, n]));
+  const position = new Map(topoSort(graph).map((id, i) => [id, i]));
+  /** async node id → its forward outbound edges (the consumers that pull) */
+  const consumers = new Map<string, DesignEdge[]>();
+  for (const e of graph.edges) {
+    const from = position.get(e.source);
+    const to = position.get(e.target);
+    const src = nodeById.get(e.source);
+    if (from === undefined || to === undefined || to <= from || !src) continue;
+    if (getComponentDef(src.kind).category !== "async") continue;
+    consumers.set(e.source, [...(consumers.get(e.source) ?? []), e]);
+  }
   let tickIndex = 0;
 
   return {
@@ -387,18 +403,48 @@ export function createSimRun(
       tickIndex += 1;
 
       const effects = applyRules(tick, scenario, rng);
+      const dead = new Set(effects.deadEdges ?? []);
+      /** pull semantics: what an async node's consumers can take this tick */
+      const pullRps = (id: string, mix: Flow): number => {
+        let limit = Infinity;
+        for (const e of consumers.get(id) ?? []) {
+          if (e.trafficShare <= 0) continue;
+          if (dead.has(e.id)) return 0; // nobody pulls over a cut link
+          const target = nodeById.get(e.target);
+          if (!target) continue;
+          const tdef = getComponentDef(target.kind);
+          const cap = getCapacityFn(target.kind)(
+            target,
+            tdef,
+            effects.aliveFraction?.[target.id] ?? 1,
+          );
+          const backlog =
+            tdef.category === "async"
+              ? zeroFlow()
+              : (queuedPrev.get(target.id) ?? zeroFlow());
+          limit = Math.min(
+            limit,
+            consumerHeadroomRps(cap, backlog, mix) / e.trafficShare,
+          );
+        }
+        return limit;
+      };
       const outputs = new Map<string, NodeModelOutput>();
       const evaluate = (
         node: DesignNode,
         def: ComponentDef,
         inflow: Flow,
       ): NodeModelOutput => {
+        const backlog = queuedPrev.get(node.id) ?? zeroFlow();
         const out = getNodeModel(node.kind)({
           node,
           def,
           inflow,
-          queuedPrev: queuedPrev.get(node.id) ?? zeroFlow(),
+          queuedPrev: backlog,
           aliveFraction: effects.aliveFraction?.[node.id] ?? 1,
+          ...(def.category === "async"
+            ? { drainRps: pullRps(node.id, addFlow(inflow, backlog)) }
+            : {}),
         });
         outputs.set(node.id, out);
         return out;
@@ -426,6 +472,17 @@ export function createSimRun(
           dropped: out.dropped + lost,
           state: out.state,
         };
+        if (getComponentDef(node.kind).category === "async") {
+          const depth = flowRps(out.queued) / TICKS_PER_SEC;
+          const lag = consumerLagSec(
+            depth,
+            flowRps(out.served),
+            prevLag.get(node.id) ?? 0,
+          );
+          prevLag.set(node.id, lag);
+          perNode[node.id].queueDepth = depth;
+          perNode[node.id].lagSec = lag;
+        }
         queuedPrev.set(node.id, out.queued);
         if (out.state !== prevState.get(node.id)) {
           prevState.set(node.id, out.state);

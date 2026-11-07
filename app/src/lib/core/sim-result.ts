@@ -2,13 +2,23 @@ import type { DesignGraph } from "./design";
 
 export type NodeState = "ok" | "hot" | "saturated" | "overloaded" | "down";
 
+/** One node's metrics for one tick. */
+export interface NodeFrame {
+  util: number;
+  /** carried backlog in RPS units (re-enters demand next tick); ÷ TICKS_PER_SEC = messages */
+  queued: number;
+  dropped: number;
+  state: NodeState;
+  /** async-category nodes only: backlog in messages */
+  queueDepth?: number;
+  /** async-category nodes only: consumer lag, seconds (depth ÷ drain rate) */
+  lagSec?: number;
+}
+
 /** One per tick (100ms), streamed worker → UI. */
 export interface SimFrame {
   t: number;
-  perNode: Record<
-    string,
-    { util: number; queued: number; dropped: number; state: NodeState }
-  >;
+  perNode: Record<string, NodeFrame>;
   perEdge: Record<string, { rps: number }>;
   p95Ms: number;
   errorRate: number;

@@ -1,6 +1,6 @@
 ---
 tags: [milestone]
-status: planning
+status: active
 milestone: M8
 depends-on: M7
 ---
@@ -16,7 +16,8 @@ Every task updates [[03-simulation-engine]] (spec + Decisions) and adds or adjus
 ## Tasks
 
 ### T-8.1 — Queues actually buffer
-- [ ] T-8.1 done
+- [x] T-8.1 done
+  - Also touched `registry/components.ts` (`retentionMsgs` config field, so queue/stream inspectors gain a "Retention (messages)" input), `node-models.test.ts`, 02/05 specs.
 
 **Files:** `src/lib/simulation/node-models.ts`, `src/lib/simulation/engine.ts`, `src/lib/core/sim-result.ts`, `tests/engine.test.ts`
 **Accept:** Async-category nodes (queue, stream) hold a large backlog: a configurable retention (instead of the 0.5s-of-capacity cap every node gets today, `node-models.ts:181`). Consumers drain it at their own capacity (pull semantics). `SimFrame` carries queue depth and consumer lag (seconds) per async node. Golden test, the review's repro: client → app (5) → queue → workers (2), 1500 RPS, spike ×3 for 3s ⇒ **0% client errors**, backlog grows then drains, lag returns to 0.
@@ -59,4 +60,8 @@ Every task updates [[03-simulation-engine]] (spec + Decisions) and adds or adjus
 
 ## Decisions
 
-- (log deviations here)
+- 2026-11-06 (user): lost queued jobs are an **advisory**, not a verdict failure; async health fails a run only via the optional `maxLagSec` NFR (T-8.2).
+- 2026-11-06 (user): timeouts/retries/breaker settings live in a new right-panel **Edge** section (both modes); the canvas popover keeps share/calls + sync/async (T-8.5/T-8.6).
+- 2026-11-06 (T-8.1, lead call): queue retention is size-based (`retentionMsgs`, default 1M) not time-based — runs last ~60 s, a time retention could never trigger.
+- 2026-11-06 (T-8.1, lead call): a sink queue (no consumer) drains unlimited; a partitioned consumer edge pauses the drain (backlog holds) instead of dropping.
+- 2026-11-06 (T-8.1, lead call): queue latency = enqueue cost only; backlog wait is consumer lag (`lagSec`), not producer p95.

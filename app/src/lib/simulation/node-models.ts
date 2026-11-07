@@ -4,11 +4,13 @@ import type {
   DesignNode,
   NodeState,
 } from "@/lib/core";
+import { getComponentDef } from "@/lib/registry";
 import {
   addFlow,
   configBoolean,
   configNumber,
   flowRps,
+  TICKS_PER_SEC,
   type Flow,
 } from "./engine";
 
@@ -104,6 +106,8 @@ export interface NodeModelInput {
   queuedPrev: Flow;
   /** 1 = healthy; the kill rule (T-2.5) lowers it; 0 = down */
   aliveFraction: number;
+  /** async nodes only: RPS the consumers can pull this tick; absent = unlimited. Other models ignore it. */
+  drainRps?: number;
 }
 
 export interface NodeModelOutput {
@@ -148,7 +152,8 @@ const MAX_MM1_UTIL = 0.95;
  * (03-simulation-engine.md), shared by every
  * kind — only the capacity computation varies. All quantities stay in the
  * spec's literal RPS units; the queue backlog re-enters demand next tick and
- * clamps at maxQueue = 0.5 × total capacity ("0.5s of capacity").
+ * clamps at maxQueue = 0.5 × total capacity ("0.5s of capacity"). That cap
+ * applies to non-async nodes only — queue/stream use makeBufferModel.
  */
 export function makeModel(capacity: CapacityFn): NodeModel {
   return ({ node, def, inflow, queuedPrev, aliveFraction }) => {
@@ -195,6 +200,78 @@ export function makeModel(capacity: CapacityFn): NodeModel {
   };
 }
 
+/** Retention fallback for an async kind whose def lacks `retentionMsgs`. */
+export const DEFAULT_RETENTION_MSGS = 1_000_000;
+
+/**
+ * Async nodes (queue, stream — 03-simulation-engine "Async nodes"): a buffer
+ * with pull semantics. It serves min(demand, own capacity, drainRps), where
+ * drainRps is what its consumers can take this tick (absent = unlimited, a
+ * sink queue); the rest is carried as backlog, capped by `retentionMsgs`
+ * converted to the engine's carry units (messages × TICKS_PER_SEC — a carried
+ * Q re-enters as Q RPS for one 0.1 s tick). Backlog beyond retention drops; a
+ * down node (zero capacity) retains nothing. util = max(ingest util,
+ * overflow ÷ retention), so a filling buffer goes hot/saturated and turns
+ * overloaded exactly when it sheds. latencyMs is the enqueue cost only — the
+ * backlog wait is consumer lag (lagSec), not producer latency.
+ */
+export function makeBufferModel(capacity: CapacityFn): NodeModel {
+  return ({ node, def, inflow, queuedPrev, aliveFraction, drainRps = Infinity }) => {
+    const cap = capacity(node, def, aliveFraction);
+    const ownCap = cap.split ? cap.readRps + cap.writeRps : cap.readRps;
+    const demand = addFlow(inflow, queuedPrev);
+    const demandTotal = flowRps(demand);
+    const servedTotal = Math.min(demandTotal, ownCap, Math.max(0, drainRps));
+    const served = splitByFlow(demand, demandTotal, servedTotal);
+    const overflow: Flow = {
+      read: demand.read - served.read,
+      write: demand.write - served.write,
+    };
+    const overflowTotal = flowRps(overflow);
+    const retention =
+      ownCap > 0
+        ? configNumber(node, def, "retentionMsgs", DEFAULT_RETENTION_MSGS) * TICKS_PER_SEC
+        : 0;
+    const queuedTotal = Math.min(overflowTotal, retention);
+    const ingestUtil = ratio(flowRps(inflow), ownCap);
+    const util = Math.max(ingestUtil, ratio(overflowTotal, retention));
+    return {
+      served,
+      queued: splitByFlow(overflow, overflowTotal, queuedTotal),
+      dropped: overflowTotal - queuedTotal,
+      util,
+      latencyMs: def.latency.baseMs / (1 - Math.min(ingestUtil, MAX_MM1_UTIL)),
+      state: nodeState(util, ownCap),
+    };
+  };
+}
+
+/**
+ * Pull headroom: the max total RPS of `mix`-shaped flow a consumer takes this
+ * tick on top of its own carried backlog. Split capacities bind on whichever
+ * direction fills first. Infinity when unlimited.
+ */
+export function consumerHeadroomRps(cap: EffectiveCapacity, backlog: Flow, mix: Flow): number {
+  if (!cap.split) return Math.max(0, cap.readRps - flowRps(backlog));
+  const read = Math.max(0, cap.readRps - backlog.read);
+  const write = Math.max(0, cap.writeRps - backlog.write);
+  const total = flowRps(mix);
+  if (total === 0) return read + write;
+  const byRead = mix.read > 0 ? read / (mix.read / total) : Infinity;
+  const byWrite = mix.write > 0 ? write / (mix.write / total) : Infinity;
+  return Math.min(byRead, byWrite);
+}
+
+/**
+ * Consumer lag in seconds: depth ÷ drain rate ("time to catch up at the
+ * current rate"); 0 with no backlog; an undrained backlog ages one tick.
+ */
+export function consumerLagSec(depthMsgs: number, drainedRps: number, prevLagSec: number): number {
+  if (depthMsgs === 0) return 0;
+  if (drainedRps > 0) return depthMsgs / drainedRps;
+  return prevLagSec + 1 / TICKS_PER_SEC;
+}
+
 /**
  * Spec thresholds: ok < 0.7 ≤ hot < 0.9 ≤ saturated ≤ 1.0 < overloaded.
  * Zero total capacity (killed) = down, regardless of util.
@@ -208,17 +285,30 @@ export function nodeState(util: number, totalCapacityRps: number): NodeState {
 }
 
 export const defaultModel: NodeModel = makeModel(defaultCapacity);
+export const bufferModel: NodeModel = makeBufferModel(defaultCapacity);
+
+/** Extension point: a kind with custom capacity math registers here (pull headroom reads it) AND its model in modelByKind. */
+export const capacityByKind: Partial<Record<ComponentKind, CapacityFn>> = {
+  db_sql: dbSqlCapacity,
+};
+
+export function getCapacityFn(kind: ComponentKind): CapacityFn {
+  return capacityByKind[kind] ?? defaultCapacity;
+}
 
 /**
  * Extension point (05-engines): a kind needing custom math registers here;
- * every other kind gets defaultModel.
+ * every other kind gets bufferModel (async category) or defaultModel.
  */
 export const modelByKind: Partial<Record<ComponentKind, NodeModel>> = {
   db_sql: makeModel(dbSqlCapacity),
 };
 
 export function getNodeModel(kind: ComponentKind): NodeModel {
-  return modelByKind[kind] ?? defaultModel;
+  return (
+    modelByKind[kind] ??
+    (getComponentDef(kind).category === "async" ? bufferModel : defaultModel)
+  );
 }
 
 /** Deterministic RPS for log lines: 8200 → "8.2k", 4000 → "4k", 950 → "950". */

@@ -21,8 +21,9 @@ for each tick t:
      queued  = clamp(demand - served, 0, maxQueue)      // maxQueue ≈ 0.5s of capacity
      dropped = demand - served - queued                  // load shedding
      util    = demand / effectiveCapacity
+     async nodes (queue, stream): served = min(demand, capacity, consumers' pull); backlog ≤ retentionMsgs; see "Async nodes"
   4. latency: sum along sync path of  baseMs / (1 - min(util, 0.95))   // M/M/1 approx
-     + queueWaitMs = queued / capacity * 1000
+     + queueWaitMs = queued / capacity * 1000           // async nodes add no queue wait (it shows as lagSec)
      p95 ≈ 1.6 × mean (good-enough approximation, documented)
   5. errorRate = Σ dropped / offeredRps
   6. emit SimFrame; evaluate verdict incrementally
@@ -49,6 +50,18 @@ DB with read replicas: reads scale with replicas, writes stay at single-primary 
 | killed | down | gray, dashed border |
 
 State transitions emit log events ("Postgres saturated at 8.2k TPS", "App-2 down — LB reroutes").
+
+## Async nodes (queue, stream)
+
+Async-category kinds use `bufferModel` (`node-models.ts`) instead of the 0.5s-of-capacity cap.
+
+- **Pull.** A queue serves `min(demand, ownCap, drainRps)`. `drainRps` = min over its forward outbound edges of `headroom(consumer) ÷ edge.trafficShare`; headroom = the consumer's effective capacity this tick (`capacityByKind`, with its aliveFraction) minus its own carried backlog, floored at 0 (an async consumer counts zero backlog). Workers therefore run saturated, never overloaded, behind a queue.
+- **Retention + units.** Backlog is carried in RPS units like every node (a carried Q re-enters as Q RPS for one tick = Q ÷ 10 messages), so `queueDepth = queued ÷ 10` and the cap is `retentionMsgs × 10` (config, default 1M messages). Backlog beyond it drops (counted in errorRate). A down queue retains nothing.
+- **Util/state.** `util = max(inflow ÷ ownCap, overflow ÷ retentionCap)`: a filling buffer goes hot at 70%, saturated at 90%, overloaded exactly when it sheds.
+- **Latency** is the enqueue cost only, `baseMs / (1 − min(ingestUtil, 0.95))`; backlog wait is consumer lag, not producer latency.
+- **Lag.** `lagSec = queueDepth ÷ drainedRps` while consumers drain; 0 with no backlog; a backlog nobody drains ages one tick per tick (`prevLag + 0.1`).
+- **Edge cases.** A sink queue (no forward consumer edge) drains without limit. A partitioned consumer edge sets `drainRps = 0` — the backlog holds instead of dropping.
+- **Frame.** `queueDepth` and `lagSec` appear on async-category nodes only.
 
 ## Stress rules
 
@@ -105,6 +118,7 @@ Golden tests in `tests/engine.test.ts`: tiny graphs with hand-computed expectati
 3. Kill 1 of 2 servers at t=5s → util doubles next tick.
 4. Spike ×3 with queue → queue drains after spike, latency recovers.
 5. Same seed twice → byte-identical frame arrays.
+6. Queue in front of workers (app ×5 → queue → workers ×2), 1500 RPS, ×3 spike for 3s → 0 errors, depth peaks 7500 msgs / lag 3.75s at t=7.9s, drains to 0 by t=22.9s.
 
 ## Decisions
 
@@ -131,3 +145,4 @@ Golden tests in `tests/engine.test.ts`: tiny graphs with hand-computed expectati
 - 2026-07-14 (T-2.7 planning): chaos — `createRuleEngine(graph, scenario) → { apply, inject }` (compileRules = its `apply`); `inject` compiles one rule through the same `ruleAppliers` registry and appends it, which composes correctly (append order only matters to ramps, which interpolate from whatever earlier appliers left). The host re-anchors the injected rule's `at` to the current sim time (frames completed ÷ 10), so it — and its `[at, at+for)` window — fires on the very next tick.
 - 2026-07-14 (T-2.7 planning): headless runs — `runSimulation(graph, scenario) → RunResult` (compile + simulate + verdict, in run.ts; `buildRunResult` shared with the worker) is the CLI/CI entry. CLI `npm run sim -- <graph.json> <scenario>`: a `<scenario>` not ending in .json resolves to `<name>.json` beside the graph file; prints one row per second + event lines + verdict; exit 0 pass / 1 fail / 2 usage. Runs under tsx (dev dep — Node can't resolve the `@/*` alias). Demo inputs in `app/examples/` (twitter.json, black-friday.json); scenario presets proper stay T-3.1.
 - 2026-07-14 (T-3.2 planning): the browser spawns the worker through a new engine helper `createSimWorker(onMessage): SimWorkerHandle` in `simulation/client.ts` — the sole home of `new Worker(new URL("./worker.ts", import.meta.url), { type: "module" })` (Turbopack's supported static form), exported from `index.ts`. Kept in the engine (not the store) so the `worker.ts` reference is simulation-internal and no dep-cruiser deep-import rule is tripped; `worker.ts`'s *value* is still never exported. The shell store `sim-store.ts` holds the `SimWorkerHandle` outside zustand state and injects a fake factory (`createWorkerHost` on fake timers) under vitest, where `Worker` is undefined.
+- 2026-11-06 (T-8.1 planning): queues buffer. Async-category nodes get `bufferModel` (pull semantics, see "Async nodes"); the 0.5s `maxQueue` (T-2.3) now applies only to non-async nodes, and T-2.2's "forward in the same pass" still holds for whatever the consumers pull. Calls: (1) retention is size-based (`retentionMsgs`, default 1M, 1000–1e8, step 1000), not time-based — runs last ~60s, so a time retention could never trigger; (2) a sink queue (no consumer edge) drains without limit, a partitioned consumer edge pauses the drain (nobody pulls over a cut link); (3) new per-kind `capacityByKind` (db_sql) beside `modelByKind`, because pull headroom needs a consumer's capacity before it is evaluated; `getNodeModel` falls back to `bufferModel` by category "async", so a future async kind buffers with no map entry; (4) `queueDepth`/`lagSec` are optional `SimFrame` fields present only on async nodes — graphs without queues produce byte-identical frames, old fixtures and bundles stay valid. The engine test "keeps async subtrees off the client latency path" changed: its worker was overloaded with 25% errors; now the queue holds the excess, the worker is saturated and errorRate is 0 — exactly the behaviour this task fixes.
