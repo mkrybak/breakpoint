@@ -26,6 +26,7 @@ flowchart LR
 | M9 | [[tasks/M9-components-and-cost\|More components + cost]] | Two-region chat system with WebSocket gateway and cost overlay | 5–7 |
 | M10 | [[tasks/M10-practice-depth\|Practice depth]] | Solve a problem with a hidden event, self-review vs par, share by link | 3–4 |
 | M11 | [[tasks/M11-live-interview-mode\|Live Interview mode]] | Interviewer + candidate in one live session | 5–7 |
+| M13 | [[tasks/M13-practice-step-boards\|Practice step boards]] | Requirements lists, entity board with crow's-foot relations, API endpoint cards; jump between steps | 4–6 |
 
 **Cut lines if time is short:** M4 timers (keep phases as plain sections). Never cut M2 tests — the engine is the product. (M5 auth/DB cut 2026-07-12 — local-first for now; a DB may return post-MVP if hosting/accounts become a goal, see [[02-data-model]] "If a database returns".)
 
