@@ -13,6 +13,7 @@ import {
   TICKS_PER_SEC,
   type Flow,
 } from "./engine";
+import { logTimeSuffix } from "./breaker";
 
 /**
  * Effective per-direction ceilings for one node this tick, in RPS.
@@ -351,25 +352,37 @@ export function formatRps(rps: number): string {
   return `${Math.round(rps)}`;
 }
 
+/** A node's state as the event log reports it: "idle" = ok only because breakers cut all its load (T-12.2). */
+export type LoggedState = NodeState | "idle";
+
+/** `at` = "" or " at 21.1s" (a held line released late, T-12.2). */
 const transitionMessage: Record<
-  NodeState,
-  (label: string, rps: string) => string
+  LoggedState,
+  (label: string, rps: string, at: string) => string
 > = {
-  ok: (label) => `${label} recovered`,
-  hot: (label) => `${label} running hot`,
-  saturated: (label, rps) => `${label} saturated at ${rps} RPS`,
-  overloaded: (label, rps) => `${label} overloaded at ${rps} RPS — shedding load`,
-  down: (label) => `${label} down`,
+  ok: (label, _rps, at) => `${label} recovered${at}`,
+  idle: (label, _rps, at) => `${label} idle${at} (breaker open)`,
+  hot: (label, _rps, at) => `${label} running hot${at}`,
+  saturated: (label, rps, at) => `${label} saturated at ${rps} RPS${at}`,
+  overloaded: (label, rps, at) =>
+    `${label} overloaded at ${rps} RPS${at} — shedding load`,
+  down: (label, _rps, at) => `${label} down${at}`,
 };
 
 /**
- * Log line for a state change. The tick loop (T-2.4) calls this when a
- * node's state differs from the previous tick (initial state "ok").
+ * Log line for a state change. The tick loop (T-2.4) calls this when the
+ * node's logged state changes (initial "ok"). `atSec` stamps a line the log
+ * releases after the tick it happened on (T-12.2).
  */
 export function transitionEvent(
   label: string,
-  to: NodeState,
+  to: LoggedState,
   servedRps: number,
+  atSec?: number,
 ): string {
-  return transitionMessage[to](label, formatRps(servedRps));
+  return transitionMessage[to](
+    label,
+    formatRps(servedRps),
+    logTimeSuffix(atSec),
+  );
 }

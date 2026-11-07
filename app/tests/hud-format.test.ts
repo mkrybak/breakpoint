@@ -89,6 +89,29 @@ describe("classifyLogSeverity", () => {
       "info",
     );
   });
+  it("keeps idle-behind-a-breaker neutral and warns on a re-open (T-12.2)", () => {
+    expect(classifyLogSeverity("Payments API idle (breaker open)")).toBe(
+      "info",
+    );
+    expect(
+      classifyLogSeverity("App → DB breaker re-opened 0.5 s after closing"),
+    ).toBe("warning");
+  });
+  it("classifies lines released late, stamped with their real time (T-12.2)", () => {
+    expect(
+      classifyLogSeverity("App → DB breaker closed at 21.1s — traffic restored"),
+    ).toBe("recovered");
+    expect(classifyLogSeverity("Payments API recovered at 21.2s")).toBe(
+      "recovered",
+    );
+    expect(classifyLogSeverity("Payments API down at 21.2s")).toBe("critical");
+    expect(classifyLogSeverity("Payments API idle at 21.2s (breaker open)")).toBe(
+      "info",
+    );
+    expect(classifyLogSeverity("Payments API running hot at 21.2s")).toBe(
+      "warning",
+    );
+  });
   it("defaults to info", () => {
     expect(classifyLogSeverity("Simulation started")).toBe("info");
   });

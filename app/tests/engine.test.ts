@@ -1031,30 +1031,45 @@ describe("propagateTraffic — breaker gate (T-8.6)", () => {
   });
 });
 
+/** Every event line of a run, tagged with its frame index. */
+const timeline = (frames: { events: string[] }[]) =>
+  frames.flatMap((f, i) => f.events.map((e) => [i, e]));
+
+/** c → app → dep with a breaker; dep is down for ticks 10–79. */
+function breakerOutage(
+  breaker: DesignEdge["breaker"] = DEFAULT_BREAKER,
+  durationSec = 13,
+) {
+  const g = graph(
+    [node("c", "client"), node("app"), node("dep")],
+    [edge("c", "app"), edge("app", "dep", { breaker })],
+  );
+  const outage: ApplyRulesFn = (t, s) => ({
+    offeredRps: s.baseRps,
+    ...(t >= 10 && t < 80 ? { aliveFraction: { dep: 0 } } : {}),
+  });
+  return simulate(
+    g,
+    scenario({ durationSec, baseRps: 1000, readRatio: 1 }),
+    outage,
+  );
+}
+
 describe("simulate — golden: circuit breaker (T-8.6)", () => {
   it("opens under a dependency outage, fails fast, probes, re-opens, then closes", () => {
-    const g = graph(
-      [node("c", "client"), node("app"), node("dep")],
-      [edge("c", "app"), edge("app", "dep", { breaker: DEFAULT_BREAKER })],
-    );
-    const outage: ApplyRulesFn = (t, s) => ({
-      offeredRps: s.baseRps,
-      ...(t >= 10 && t < 80 ? { aliveFraction: { dep: 0 } } : {}),
-    });
-    const frames = simulate(
-      g,
-      scenario({ durationSec: 13, baseRps: 1000, readRatio: 1 }),
-      outage,
-    );
-    const lines = frames.flatMap((f, i) =>
-      f.events.filter((e) => e.includes("breaker")).map((e) => [i, e]),
-    );
-    expect(lines).toEqual([
+    const frames = breakerOutage();
+    // T-12.2: dep is back at 80 but the open breaker hides it (idle, not recovered);
+    // the close at 116 logs at 122, once a re-open within 1 s is impossible,
+    // stamped with the time it really happened
+    expect(timeline(frames)).toEqual([
+      [10, "dep down"],
       [14, "app → dep breaker open at 100% errors — failing fast"],
       [65, "app → dep breaker half-open — probing"],
       [65, "app → dep breaker open at 100% errors — failing fast"],
+      [80, "dep idle (breaker open)"],
       [116, "app → dep breaker half-open — probing"],
-      [116, "app → dep breaker closed — traffic restored"],
+      [122, "app → dep breaker closed at 11.6s — traffic restored"],
+      [122, "dep recovered at 11.7s"],
     ]);
     const phase = (i: number) => frames[i].perEdge["e-app-dep"].breaker;
     const rps = (i: number) => frames[i].perEdge["e-app-dep"].rps;
@@ -1132,7 +1147,8 @@ describe("simulate — golden: circuit breaker (T-8.6)", () => {
       f.events.filter((e) => e.includes("breaker")),
     );
     expect(lines[0]).toMatch(/breaker open at \d+% errors/);
-    expect(lines.at(-1)).toMatch(/breaker closed — traffic restored$/);
+    // T-12.2: the close logs late, stamped with when it happened
+    expect(lines.at(-1)).toMatch(/breaker closed at 6\.5s — traffic restored$/);
     expect(
       on.some(
         (f) =>
@@ -1145,5 +1161,86 @@ describe("simulate — golden: circuit breaker (T-8.6)", () => {
       expect(["ok", "hot"]).toContain(f.perNode[dependencyId].state);
       expect(f.perEdge[retryEdgeId].breaker).toBe("closed");
     }
+  });
+});
+
+describe("simulate — event log around breakers (T-12.2)", () => {
+  it("collapses a re-open within 1 s of closing into one line; recovered waits for real traffic", () => {
+    const g = graph(
+      [node("c", "client"), node("app", "app_server", { replicas: 3 }), node("pay")],
+      [
+        edge("c", "app"),
+        edge("app", "pay", { timeoutMs: 100, retries: 3, breaker: DEFAULT_BREAKER }),
+      ],
+    );
+    const sc = scenario({
+      durationSec: 25,
+      baseRps: 1500,
+      timeline: [{ at: 10, rule: "spike", factor: 3, forSec: 10 }],
+    });
+    const frames = simulate(g, sc, compileRules(g, sc));
+    expect(timeline(frames)).toEqual([
+      [100, "pay overloaded at 4k RPS — shedding load"],
+      [104, "app → pay breaker open at 97% errors — failing fast"],
+      [105, "pay idle (breaker open)"],
+      [155, "app → pay breaker half-open — probing"],
+      [160, "app → pay breaker re-opened 0.5 s after closing"],
+      [211, "app → pay breaker half-open — probing"],
+      [217, "app → pay breaker closed at 21.1s — traffic restored"],
+      [217, "pay recovered at 21.2s"],
+    ]);
+    // log-only: the frames still show the close and the overload it hid
+    expect(frames[156].perEdge["e-app-pay"].breaker).toBe("closed");
+    expect(frames[156].perNode.pay.state).toBe("overloaded");
+    expect(frames[212].perEdge["e-app-pay"].breaker).toBe("closed");
+  });
+
+  it("nodes whose whole load runs through an open breaker go idle too", () => {
+    const g = graph(
+      [
+        node("c", "client"),
+        node("app", "app_server", { replicas: 4 }),
+        node("dep"),
+        node("db"),
+      ],
+      [
+        edge("c", "app"),
+        edge("app", "dep", { timeoutMs: 200, retries: 3, breaker: DEFAULT_BREAKER }),
+        edge("dep", "db"),
+      ],
+    );
+    const frames = simulate(g, scenario({ durationSec: 12, baseRps: 3000 }));
+    expect(frames[11].events).toEqual([
+      "app → dep breaker open at 91% errors — failing fast",
+    ]);
+    expect(frames[12].events).toEqual([
+      "dep idle (breaker open)",
+      "db idle (breaker open)",
+    ]);
+    expect(
+      frames.flatMap((f) => f.events).some((e) => e.endsWith("recovered")),
+    ).toBe(false);
+  });
+
+  it("a trip window over 1 s can't re-open in time, so the close logs on its own tick", () => {
+    // released on the tick it happened: plain wording, no "at Xs"
+    expect(timeline(breakerOutage({ ...DEFAULT_BREAKER, tripAfterSec: 2 }))).toEqual([
+      [10, "dep down"],
+      [29, "app → dep breaker open at 100% errors — failing fast"],
+      [80, "app → dep breaker half-open — probing"],
+      [80, "dep idle (breaker open)"],
+      [80, "app → dep breaker closed — traffic restored"],
+      [81, "dep recovered"],
+    ]);
+  });
+
+  it("flushes held lines on the last frame", () => {
+    const frames = breakerOutage(DEFAULT_BREAKER, 11.8);
+    expect(frames).toHaveLength(118);
+    // the close (116) is released late and stamped; dep's recovery is on the last tick itself
+    expect(timeline(frames).slice(-2)).toEqual([
+      [117, "app → dep breaker closed at 11.6s — traffic restored"],
+      [117, "dep recovered"],
+    ]);
   });
 });

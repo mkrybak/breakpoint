@@ -122,24 +122,56 @@ export function endBreakerTick(
   return { state: { ...state, streak } };
 }
 
+/** " at 21.1s" for a log line released after the tick it happened on (T-12.2); "" otherwise. */
+export function logTimeSuffix(atSec?: number): string {
+  return atSec === undefined ? "" : ` at ${atSec.toFixed(1)}s`;
+}
+
+/** `at` = "" or " at 21.1s"; only a closed line is ever held and released late (T-12.2). */
 const breakerMessage: Record<
   BreakerPhase,
-  (path: string, failPct: number) => string
+  (path: string, failPct: number, at: string) => string
 > = {
   open: (path, pct) => `${path} breaker open at ${pct}% errors — failing fast`,
   "half-open": (path) => `${path} breaker half-open — probing`,
-  closed: (path) => `${path} breaker closed — traffic restored`,
+  closed: (path, _pct, at) => `${path} breaker closed${at} — traffic restored`,
 };
 
-/** Log line for a breaker transition; path = "Source → Target" node labels. */
+/**
+ * Log line for a breaker transition; path = "Source → Target" node labels.
+ * `atSec` stamps a closed line the log releases after its tick (T-12.2).
+ */
 export function breakerEvent(
   sourceLabel: string,
   targetLabel: string,
   to: BreakerPhase,
   failRate = 0,
+  atSec?: number,
 ): string {
   return breakerMessage[to](
     `${sourceLabel} → ${targetLabel}`,
     Math.round(failRate * 100),
+    logTimeSuffix(atSec),
   );
+}
+
+/** A breaker that re-trips within this long of closing logs one "re-opened" line instead of closed → … → open (T-12.2). */
+export const REOPEN_WINDOW_SEC = 1;
+
+/** Could a closed breaker still trip within the next `ticksLeft` ticks? (needs tripTicks − streak more ticks over threshold) */
+export function canReopenWithin(
+  state: BreakerState,
+  cfg: ResolvedBreaker,
+  ticksLeft: number,
+): boolean {
+  return state.phase === "closed" && ticksLeft >= cfg.tripTicks - state.streak;
+}
+
+/** The one line for a breaker that re-opened `afterSec` after closing: "App → DB breaker re-opened 0.5 s after closing". */
+export function breakerReopenedEvent(
+  sourceLabel: string,
+  targetLabel: string,
+  afterSec: number,
+): string {
+  return `${sourceLabel} → ${targetLabel} breaker re-opened ${Math.round(afterSec * 10) / 10} s after closing`;
 }

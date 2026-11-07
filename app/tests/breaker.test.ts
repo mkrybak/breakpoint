@@ -3,6 +3,8 @@ import type { DesignEdge } from "../src/lib/core";
 import {
   beginBreakerTick,
   breakerEvent,
+  breakerReopenedEvent,
+  canReopenWithin,
   CLOSED_BREAKER,
   DEFAULT_BREAKER,
   endBreakerTick,
@@ -138,6 +140,37 @@ describe("breakerEvent", () => {
     );
     expect(breakerEvent("App", "DB", "closed")).toBe(
       "App → DB breaker closed — traffic restored",
+    );
+  });
+});
+
+describe("re-open window (T-12.2)", () => {
+  const cfg: ResolvedBreaker = { threshold: 0.5, tripTicks: 5, cooldownTicks: 50 };
+  const streak2: BreakerState = { phase: "closed", streak: 2, openTicks: 0 };
+  const open: BreakerState = { phase: "open", streak: 0, openTicks: 0 };
+
+  it.each([
+    [CLOSED_BREAKER, 5, true],
+    [CLOSED_BREAKER, 4, false],
+    [streak2, 3, true],
+    [streak2, 2, false],
+    [open, 10, false],
+  ] as const)("canReopenWithin(%o, %i) = %s", (state, ticksLeft, expected) => {
+    expect(canReopenWithin(state, cfg, ticksLeft)).toBe(expected);
+  });
+
+  it("renders the one re-opened line", () => {
+    expect(breakerReopenedEvent("App", "DB", 0.5)).toBe(
+      "App → DB breaker re-opened 0.5 s after closing",
+    );
+    expect(breakerReopenedEvent("App", "DB", 1)).toBe(
+      "App → DB breaker re-opened 1 s after closing",
+    );
+  });
+
+  it("stamps a closed line released late with its real time", () => {
+    expect(breakerEvent("App", "DB", "closed", 0, 21.1)).toBe(
+      "App → DB breaker closed at 21.1s — traffic restored",
     );
   });
 });

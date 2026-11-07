@@ -256,6 +256,20 @@ describe("transition events", () => {
     );
     expect(transitionEvent("App", "hot", 3000)).toBe("App running hot");
     expect(transitionEvent("App", "ok", 1000)).toBe("App recovered");
+    expect(transitionEvent("Payments API", "idle", 0)).toBe(
+      "Payments API idle (breaker open)",
+    );
+  });
+  it("stamps a line released late with its real time (T-12.2)", () => {
+    expect(transitionEvent("App", "ok", 1000, 21.2)).toBe(
+      "App recovered at 21.2s",
+    );
+    expect(transitionEvent("App", "overloaded", 4000, 20)).toBe(
+      "App overloaded at 4k RPS at 20.0s — shedding load",
+    );
+    expect(transitionEvent("App", "idle", 0, 21.2)).toBe(
+      "App idle at 21.2s (breaker open)",
+    );
   });
 });
 

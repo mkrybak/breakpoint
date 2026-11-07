@@ -33,12 +33,20 @@ export type LogSeverity = "critical" | "warning" | "recovered" | "info";
 /**
  * Classify an engine event line by its state-transition wording (node-models
  * `transitionMessage`). Matches distinctive tokens rather than the user-set node
- * label: "overloaded"/"shedding load"/trailing " down" → critical, "saturated"/
- * "running hot" → warning, "recovered" → good, anything else → info.
+ * label: "idle (breaker open)" → info (checked first: it contains "breaker
+ * open"), "overloaded"/"shedding load"/trailing " down" → critical, "saturated"/
+ * "running hot"/"breaker open"/"breaker re-opened" → warning, "recovered"/
+ * "breaker closed" → good, anything else → info. A line the engine released
+ * late carries " at 21.1s" after its state word (T-12.2).
  */
 export function classifyLogSeverity(message: string): LogSeverity {
-  if (/overloaded|shedding load| down$/.test(message)) return "critical";
-  if (/saturated|running hot|breaker open/.test(message)) return "warning";
+  if (/ idle( at [\d.]+s)? \(breaker open\)$/.test(message)) return "info";
+  if (/overloaded|shedding load| down( at [\d.]+s)?$/.test(message)) {
+    return "critical";
+  }
+  if (/saturated|running hot|breaker open|breaker re-opened/.test(message)) {
+    return "warning";
+  }
   if (/recovered|breaker closed/.test(message)) return "recovered";
   return "info";
 }

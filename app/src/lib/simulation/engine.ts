@@ -4,7 +4,6 @@ import type {
   DesignEdge,
   DesignGraph,
   DesignNode,
-  NodeState,
   Scenario,
   SimFrame,
 } from "@/lib/core";
@@ -18,14 +17,18 @@ import {
   getCapacityFn,
   getNodeModel,
   transitionEvent,
+  type LoggedState,
   type NodeModelOutput,
 } from "./node-models";
 import { mulberry32, type Rng } from "./rng";
 import {
   beginBreakerTick,
   breakerEvent,
+  breakerReopenedEvent,
+  canReopenWithin,
   CLOSED_BREAKER,
   endBreakerTick,
+  REOPEN_WINDOW_SEC,
   resolveBreaker,
   type BreakerState,
   type ResolvedBreaker,
@@ -597,7 +600,10 @@ export interface SimRun {
  * byte-identical frames. Policy edges (timeouts/retries, T-8.5) carry
  * EdgeState tick-to-tick, breaker edges a BreakerState (T-8.6); no RNG, so
  * determinism holds. simulate() drains it
- * in one go; the worker paces it in real time.
+ * in one go; the worker paces it in real time. The event log reports
+ * breaker-shadowed ok nodes as idle and holds a closed breaker's lines until
+ * it can't re-open within REOPEN_WINDOW_SEC (T-12.2); frames other than
+ * `events` are unaffected.
  */
 export function createSimRun(
   graph: DesignGraph,
@@ -612,20 +618,25 @@ export function createSimRun(
   const queuedPrev = new Map<string, Flow>(
     graph.nodes.map((n) => [n.id, zeroFlow()]),
   );
-  const prevState = new Map<string, NodeState>(
+  /** what the event log last said about each node (T-12.2) */
+  const logged = new Map<string, LoggedState>(
     graph.nodes.map((n) => [n.id, "ok"]),
   );
   const prevLag = new Map<string, number>();
   const clientSharePrev = new Map<string, number>();
   const nodeById = new Map(graph.nodes.map((n) => [n.id, n]));
-  const position = new Map(topoSort(graph).map((id, i) => [id, i]));
+  const order = topoSort(graph);
+  const position = new Map(order.map((id, i) => [id, i]));
   /** async node id → its forward outbound edges (the consumers that pull) */
   const consumers = new Map<string, DesignEdge[]>();
+  /** node id → its forward inbound edges */
+  const forwardIn = new Map<string, DesignEdge[]>();
   for (const e of graph.edges) {
     const from = position.get(e.source);
     const to = position.get(e.target);
     const src = nodeById.get(e.source);
     if (from === undefined || to === undefined || to <= from || !src) continue;
+    forwardIn.set(e.target, [...(forwardIn.get(e.target) ?? []), e]);
     if (getComponentDef(src.kind).category !== "async") continue;
     consumers.set(e.source, [...(consumers.get(e.source) ?? []), e]);
   }
@@ -648,13 +659,42 @@ export function createSimRun(
     edge: DesignEdge,
     to: BreakerState["phase"],
     rate?: number,
+    atSec?: number,
   ): string =>
     breakerEvent(
       nodeById.get(edge.source)?.label ?? edge.source,
       nodeById.get(edge.target)?.label ?? edge.target,
       to,
       rate,
+      atSec,
     );
+  /** nodes whose every forward inbound edge is gated or comes from such a node */
+  const shadowOf = (gated: ReadonlySet<string>): Set<string> => {
+    const shadow = new Set<string>();
+    if (gated.size === 0) return shadow;
+    for (const id of order) {
+      const ins = forwardIn.get(id) ?? [];
+      if (
+        ins.length > 0 &&
+        ins.every((e) => gated.has(e.id) || shadow.has(e.source))
+      ) {
+        shadow.add(id);
+      }
+    }
+    return shadow;
+  };
+  /** breaker edge id → the nodes whose whole load runs through it */
+  const behind = new Map(
+    [...breakers.keys()].map((id) => [id, shadowOf(new Set([id]))]),
+  );
+  /** a held log line: the tick it happened on, and its text (stamped with that time if released later) */
+  type HeldLine = { tick: number; render: (atSec?: number) => string };
+  /** breaker edge id → lines held after it closed, until it can no longer re-open within REOPEN_WINDOW_SEC */
+  const holds = new Map<
+    string,
+    { sinceTick: number; lines: HeldLine[]; restore: Map<string, LoggedState> }
+  >();
+  const reopenWindowTicks = Math.round(REOPEN_WINDOW_SEC * TICKS_PER_SEC);
   let tickIndex = 0;
 
   return {
@@ -720,17 +760,19 @@ export function createSimRun(
       }
       const edgePass: Record<string, number> = {};
       const tickPhase = new Map<string, BreakerState["phase"]>();
-      const breakerLines = new Map<string, string[]>();
+      const events: string[] = [];
+      const gated = new Set<string>();
       for (const [id, b] of breakers) {
         const begun = beginBreakerTick(b.state, b.cfg);
         b.state = begun.state;
         tickPhase.set(id, begun.state.phase);
-        if (begun.pass < 1) edgePass[id] = begun.pass;
-        breakerLines.set(
-          id,
-          begun.halfOpened ? [breakerLine(b.edge, "half-open")] : [],
-        );
+        if (begun.pass < 1) {
+          edgePass[id] = begun.pass;
+          gated.add(id);
+        }
+        if (begun.halfOpened) events.push(breakerLine(b.edge, "half-open"));
       }
+      const shadow = shadowOf(gated);
       const prop = propagateTraffic(
         graph,
         splitFlow(effects.offeredRps, scenario.readRatio),
@@ -745,7 +787,6 @@ export function createSimRun(
       const shares = clientShares(graph, prop, clientSharePrev);
 
       const perNode: SimFrame["perNode"] = {};
-      const events: string[] = [];
       let clientDropped = 0;
       let asyncDropped = 0;
       let maxLagSec = 0;
@@ -780,11 +821,23 @@ export function createSimRun(
         }
         maxLagSec = Math.max(maxLagSec, perNode[node.id].lagSec ?? 0);
         queuedPrev.set(node.id, out.queued);
-        if (out.state !== prevState.get(node.id)) {
-          prevState.set(node.id, out.state);
-          events.push(
-            transitionEvent(node.label, out.state, flowRps(out.served)),
-          );
+        const shown: LoggedState =
+          out.state === "ok" && shadow.has(node.id) ? "idle" : out.state;
+        const was = logged.get(node.id) ?? "ok";
+        if (shown !== was) {
+          logged.set(node.id, shown);
+          const servedRps = flowRps(out.served);
+          const render = (atSec?: number) =>
+            transitionEvent(node.label, shown, servedRps, atSec);
+          const hold = [...holds].find(([id]) =>
+            behind.get(id)?.has(node.id),
+          )?.[1];
+          if (hold) {
+            if (!hold.restore.has(node.id)) hold.restore.set(node.id, was);
+            hold.lines.push({ tick, render });
+          } else {
+            events.push(render());
+          }
         }
       }
 
@@ -817,13 +870,53 @@ export function createSimRun(
         const failRate = edgeTicks.get(id)?.failRate ?? 0;
         const ended = endBreakerTick(b.state, b.cfg, failRate);
         b.state = ended.state;
-        if (ended.transition) {
-          breakerLines
-            .get(id)
-            ?.push(breakerLine(b.edge, ended.transition, failRate));
+        const held = holds.get(id);
+        if (ended.transition === "open" && held) {
+          holds.delete(id);
+          for (const [nodeId, st] of held.restore) logged.set(nodeId, st);
+          events.push(
+            breakerReopenedEvent(
+              nodeById.get(b.edge.source)?.label ?? b.edge.source,
+              nodeById.get(b.edge.target)?.label ?? b.edge.target,
+              (tick - held.sinceTick) / TICKS_PER_SEC,
+            ),
+          );
+        } else if (ended.transition === "closed") {
+          const edge = b.edge;
+          holds.set(id, {
+            sinceTick: tick,
+            lines: [
+              {
+                tick,
+                render: (atSec) => breakerLine(edge, "closed", 0, atSec),
+              },
+            ],
+            restore: new Map(),
+          });
+        } else if (ended.transition) {
+          events.push(breakerLine(b.edge, ended.transition, failRate));
+        }
+        const hold = holds.get(id);
+        if (
+          hold &&
+          (tickIndex >= tickCount ||
+            !canReopenWithin(
+              b.state,
+              b.cfg,
+              hold.sinceTick + reopenWindowTicks - tick,
+            ))
+        ) {
+          holds.delete(id);
+          // a line released after its own tick says when it really happened
+          for (const line of hold.lines) {
+            events.push(
+              line.render(
+                line.tick === tick ? undefined : line.tick / TICKS_PER_SEC,
+              ),
+            );
+          }
         }
       }
-      for (const lines of breakerLines.values()) events.push(...lines);
 
       const perEdge: SimFrame["perEdge"] = {};
       for (const edge of graph.edges) {
