@@ -432,8 +432,12 @@ useDesignStore.subscribe((state, prev) => {
   }
 });
 
-// Record interview phase transitions (skip or auto-advance) as phase_started.
+// Record interview phase transitions (skip or auto-advance) as phase_started —
+// only on the attached design's own clock (T-12.7): restoring a saved phase on
+// attach, or the landing's reset() of a detached clock, records nothing.
 usePhaseStore.subscribe((state, prev) => {
   if (state.phase === prev.phase) return;
+  if (state.designId !== prev.designId) return;
+  if (state.designId !== useDesignStore.getState().designId) return;
   recordInterviewAction(phaseStartedAction(state.phase));
 });

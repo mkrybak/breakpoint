@@ -19,6 +19,7 @@ import {
   type DesignRecord,
 } from "../src/persistence/local";
 import { scorecardStorageKey } from "../src/persistence/scorecard";
+import { phaseClockStorageKey } from "../src/persistence/phase-clock";
 
 function createStorageMock() {
   const data = new Map<string, string>();
@@ -239,14 +240,16 @@ describe("listDesigns", () => {
 });
 
 describe("deleteDesign", () => {
-  it("removes the design and its scorecard", () => {
+  it("removes the design, its scorecard and its phase clock", () => {
     saveDesign(recordAt("d1", "D1", "2026-01-01T00:00:00.000Z"));
     localStorage.setItem(scorecardStorageKey("d1"), "{}");
+    localStorage.setItem(phaseClockStorageKey("d1"), "{}");
 
     deleteDesign("d1");
 
     expect(localStorage.getItem(designStorageKey("d1"))).toBeNull();
     expect(localStorage.getItem(scorecardStorageKey("d1"))).toBeNull();
+    expect(localStorage.getItem(phaseClockStorageKey("d1"))).toBeNull();
   });
 
   it("does not throw without localStorage", () => {

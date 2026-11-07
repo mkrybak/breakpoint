@@ -14,6 +14,7 @@ import type { Scorecard } from "@/lib/grading";
 import { COMPONENT_KINDS, isSplitSource } from "@/lib/registry";
 import { parseScenario } from "@/lib/scenarios";
 import { parseScorecard, scorecardStorageKey } from "./scorecard";
+import { phaseClockStorageKey } from "./phase-clock";
 
 /** Product mode (product-modes spec). Shell-only: engines never see it. */
 export type DesignMode = "quick" | "practice" | "interview";
@@ -174,12 +175,13 @@ export function listDesigns(): DesignRecord[] {
   return records.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 }
 
-/** Removes a design and its scorecard (if any). Best-effort. */
+/** Removes a design, its scorecard and its phase clock (if any). Best-effort. */
 export function deleteDesign(id: string): void {
   try {
     const store = storage();
     store?.removeItem(designStorageKey(id));
     store?.removeItem(scorecardStorageKey(id));
+    store?.removeItem(phaseClockStorageKey(id));
   } catch {
     // deletion must never take the app down
   }

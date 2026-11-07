@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useLayoutEffect } from "react";
 import { ChevronRight, Pause, Play, Plus } from "lucide-react";
 import {
   PHASES,
@@ -8,11 +8,22 @@ import {
   phaseIndex,
   usePhaseStore,
 } from "@/stores/phase-store";
+import { useDesignStore } from "@/stores/design-store";
 
 const BTN =
   "flex items-center gap-1 rounded-lg border border-neutral-700 bg-neutral-900 px-2.5 py-1 text-xs font-medium text-neutral-200 hover:border-neutral-500 disabled:cursor-not-allowed disabled:opacity-40";
 
 export function PhaseBar() {
+  const designId = useDesignStore((s) => s.designId);
+  // Bind the global clock to this design (T-12.7): restore its saved phase before
+  // paint so a reload in High-level design never flashes a locked canvas; detach on
+  // leave so landing's reset() can't overwrite this design's saved clock.
+  useLayoutEffect(() => {
+    if (designId === null) return;
+    usePhaseStore.getState().attach(designId);
+    return () => usePhaseStore.getState().detach();
+  }, [designId]);
+
   const phase = usePhaseStore((s) => s.phase);
   const remainingSec = usePhaseStore((s) => s.remainingSec);
   const running = usePhaseStore((s) => s.running);

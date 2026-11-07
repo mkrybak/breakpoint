@@ -32,7 +32,12 @@ function log(): Pick<ActionEvent, "phase" | "kind" | "detail">[] {
 beforeEach(() => {
   vi.stubGlobal("localStorage", createStorageMock());
   // Fixed clock + phase so stamped events are deterministic.
-  usePhaseStore.setState({ phase: "hld", elapsedSec: 100, running: false });
+  usePhaseStore.setState({
+    phase: "hld",
+    elapsedSec: 100,
+    running: false,
+    designId: "rec",
+  });
   // Attach a design (designId non-null → recording active); starts empty.
   useDesignStore.getState().attachDesign("rec");
 });
@@ -128,6 +133,28 @@ describe("action recording", () => {
     );
     useDesignStore.getState().importRecord(record);
     // The imported graph has a node, but importing is not a candidate edit.
+    expect(useDesignStore.getState().actionLog).toEqual([]);
+  });
+
+  it("restoring a saved phase on attach records nothing", () => {
+    localStorage.setItem(
+      "bp:phase:rec2",
+      JSON.stringify({
+        phase: "deepdive",
+        remainingSec: 10,
+        elapsedSec: 1500,
+        running: false,
+      }),
+    );
+    useDesignStore.getState().attachDesign("rec2");
+    usePhaseStore.setState({ phase: "requirements", designId: null });
+    usePhaseStore.getState().attach("rec2");
+    expect(useDesignStore.getState().actionLog).toEqual([]);
+  });
+
+  it("a detached clock's reset records nothing (landing)", () => {
+    usePhaseStore.getState().detach();
+    usePhaseStore.getState().reset(); // hld → requirements
     expect(useDesignStore.getState().actionLog).toEqual([]);
   });
 

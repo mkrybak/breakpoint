@@ -206,6 +206,8 @@ localStorage autosaves the working design; export/import moves bundles between c
 
 Quick-mode challenge progress is per browser, not per design: `bp:challenges:solved` holds a JSON array of solved challenge scenario ids (forgiving parse, best-effort write).
 
+The Practice interview clock is per design: `bp:phase:<id>` holds `{ phase, remainingSec, elapsedSec, running }`. It's written on every clock change while that design's phase bar is mounted, restored on open (time away doesn't count), and removed with the design. It isn't part of `DesignRecord` or exports.
+
 ### If a database returns (post-MVP: hosting, accounts, or AI grading)
 
 Everything above is JSON-serializable by design, so the migration is mechanical — each record becomes a JSONB column. The dropped Drizzle sketch, for reference (app-side code recoverable from `app/` git history, commit `5de2a01`):
@@ -246,3 +248,4 @@ scorecards   (id, run_id, grader_id → users, rubric_scores JSONB, feedback_md 
 - 2026-11-06 (T-8.6 planning): DesignEdge.breaker?: EdgeBreaker { errorThreshold 0–1, tripAfterSec, cooldownSec } (seconds, like StressRule; defaults 0.5 / 0.5 / 5 live in simulation's DEFAULT_BREAKER since core holds no values). parseEdge keeps it on split and call edges, rejects a malformed one, never clamps (the engine does). SimFrame.perEdge[id].breaker (BreakerPhase) appears only on breaker edges. Toggling a breaker records config_changed.
 - 2026-11-07 (T-12.1 planning): `EdgeFrame.failedFastRps?` and `Verdict.breakerTrips?: BreakerTrip[]` ({ edgeId, sourceLabel, targetId, targetLabel, failedFast, recoveredAtSec: number | null }) are optional and present only when non-zero / non-empty, so old frames, runs and bundles stay valid.
 - 2026-11-07 (T-12.5 planning): `SimFrame.p95ByNode?: Record<string, number>` (node id → ms of p95Ms, Euler split of mean + 2σ; rounded to 0.01 ms, zero entries omitted, absent when nothing is positive). Optional and additive: no other frame value changes, and pre-T-12.5 bundles simply lack it (the HUD popover then shows only the explanation).
+- 2026-11-07 (T-12.7 planning): Practice phase clock persisted per design under bp:phase:<id> (separate key, not in DesignRecord/exports); restored as saved, with no wall-clock catch-up; phase_started is recorded only for the attached design's own clock, so attach-restore and landing reset() record nothing.

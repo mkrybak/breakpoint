@@ -1,13 +1,10 @@
 "use client";
 
 import { useScenarioStore } from "@/stores/scenario-store";
+import { FIELD_LABEL, INPUT } from "./styles";
 
 const HEADING =
   "text-xs font-semibold tracking-wide text-neutral-400 uppercase";
-const FIELD_LABEL =
-  "text-[10px] font-medium tracking-wider text-neutral-500 uppercase";
-const INPUT =
-  "mt-1 w-full rounded border border-neutral-700 bg-neutral-800 px-2 py-1 text-xs text-neutral-100";
 
 export function RequirementsPanel() {
   const scenario = useScenarioStore((s) => s.scenario);

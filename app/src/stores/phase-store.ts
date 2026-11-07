@@ -1,5 +1,10 @@
 import { create } from "zustand";
 import type { Phase } from "@/lib/core";
+import {
+  loadPhaseClock,
+  savePhaseClock,
+  type PhaseClock,
+} from "@/persistence/phase-clock";
 
 /** One interview phase: id (matches core `Phase`), display label, budget. */
 export interface PhaseConfig {
@@ -68,15 +73,28 @@ interface PhaseStore {
   toggleRunning: () => void;
   /** Return to the first phase, full budget, running. */
   reset: () => void;
+  /** Design this clock belongs to and persists under (T-12.7); null = detached, nothing saved. */
+  designId: string | null;
+  /** Bind to `id`: restore its saved clock, or start a fresh one. Does not write. */
+  attach: (id: string) => void;
+  /** Stop persisting. Clock values are kept. */
+  detach: () => void;
 }
 
 const FIRST = PHASES[0];
 
+function freshClock(): PhaseClock {
+  return {
+    phase: FIRST.phase,
+    remainingSec: FIRST.durationSec,
+    elapsedSec: 0,
+    running: true,
+  };
+}
+
 export const usePhaseStore = create<PhaseStore>((set) => ({
-  phase: FIRST.phase,
-  remainingSec: FIRST.durationSec,
-  elapsedSec: 0,
-  running: true,
+  ...freshClock(),
+  designId: null,
 
   tick: () =>
     set((s) => {
@@ -106,11 +124,29 @@ export const usePhaseStore = create<PhaseStore>((set) => ({
 
   toggleRunning: () => set((s) => ({ running: !s.running })),
 
-  reset: () =>
-    set({
-      phase: FIRST.phase,
-      remainingSec: FIRST.durationSec,
-      elapsedSec: 0,
-      running: true,
-    }),
+  reset: () => set(freshClock()),
+
+  attach: (id) => set({ designId: id, ...(loadPhaseClock(id) ?? freshClock()) }),
+
+  detach: () => set({ designId: null }),
 }));
+
+// Persist the attached design's clock on every change (≈1 write/s while running;
+// ~80 bytes). Attach/detach transitions are not edits: skipping them avoids
+// echo-saving a just-loaded clock.
+usePhaseStore.subscribe((state, prev) => {
+  if (state.designId === null || state.designId !== prev.designId) return;
+  if (
+    state.phase === prev.phase &&
+    state.remainingSec === prev.remainingSec &&
+    state.elapsedSec === prev.elapsedSec &&
+    state.running === prev.running
+  )
+    return;
+  savePhaseClock(state.designId, {
+    phase: state.phase,
+    remainingSec: state.remainingSec,
+    elapsedSec: state.elapsedSec,
+    running: state.running,
+  });
+});

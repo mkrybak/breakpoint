@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   CANVAS_UNLOCK_PHASE,
   PHASES,
@@ -11,6 +11,7 @@ import {
 } from "../src/stores/phase-store";
 
 beforeEach(() => {
+  usePhaseStore.getState().detach();
   usePhaseStore.getState().reset();
 });
 
@@ -136,5 +137,86 @@ describe("phase store", () => {
     usePhaseStore.getState().tick();
     usePhaseStore.getState().reset();
     expect(usePhaseStore.getState().elapsedSec).toBe(0);
+  });
+});
+
+function createStorageMock() {
+  const data = new Map<string, string>();
+  return {
+    getItem: (key: string) => data.get(key) ?? null,
+    setItem: (key: string, value: string) => void data.set(key, value),
+    removeItem: (key: string) => void data.delete(key),
+    clear: () => data.clear(),
+    key: (index: number) => [...data.keys()][index] ?? null,
+    get length() {
+      return data.size;
+    },
+  };
+}
+
+describe("persistence (T-12.7)", () => {
+  beforeEach(() => {
+    vi.stubGlobal("localStorage", createStorageMock());
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("attach with nothing saved starts a fresh clock and does not write", () => {
+    usePhaseStore.getState().attach("p1");
+    const s = usePhaseStore.getState();
+    expect(s.phase).toBe("requirements");
+    expect(s.remainingSec).toBe(300);
+    expect(s.elapsedSec).toBe(0);
+    expect(s.running).toBe(true);
+    expect(s.designId).toBe("p1");
+    expect(localStorage.getItem("bp:phase:p1")).toBeNull();
+  });
+
+  it("attach restores a saved clock (canvas unlocked in HLD)", () => {
+    localStorage.setItem(
+      "bp:phase:p1",
+      JSON.stringify({
+        phase: "hld",
+        remainingSec: 600,
+        elapsedSec: 720,
+        running: true,
+      }),
+    );
+    usePhaseStore.getState().attach("p1");
+    const s = usePhaseStore.getState();
+    expect(s.phase).toBe("hld");
+    expect(s.remainingSec).toBe(600);
+    expect(s.elapsedSec).toBe(720);
+    expect(s.running).toBe(true);
+    expect(isCanvasLocked(s.phase)).toBe(false);
+  });
+
+  it("saves every clock change of the attached design", () => {
+    usePhaseStore.getState().attach("p1");
+    usePhaseStore.getState().skip();
+    usePhaseStore.getState().skip();
+    usePhaseStore.getState().skip();
+    usePhaseStore.getState().tick();
+    expect(JSON.parse(localStorage.getItem("bp:phase:p1") ?? "null")).toEqual({
+      phase: "hld",
+      remainingSec: 899,
+      elapsedSec: 1,
+      running: true,
+    });
+  });
+
+  it("saves nothing while detached", () => {
+    usePhaseStore.getState().attach("p1");
+    usePhaseStore.getState().detach();
+    usePhaseStore.getState().skip();
+    expect(localStorage.getItem("bp:phase:p1")).toBeNull();
+  });
+
+  it("reset keeps the attached design", () => {
+    usePhaseStore.getState().attach("p1");
+    usePhaseStore.getState().reset();
+    expect(usePhaseStore.getState().designId).toBe("p1");
   });
 });
