@@ -4,14 +4,37 @@ import {
   BaseEdge,
   EdgeLabelRenderer,
   getBezierPath,
+  useInternalNode,
   type EdgeProps,
+  type InternalNode,
 } from "@xyflow/react";
+import {
+  Ellipsis,
+  Repeat,
+  ShieldAlert,
+  ShieldOff,
+  Timer,
+  type LucideIcon,
+} from "lucide-react";
 import { edgeDashDuration, edgeWidth } from "@/components/canvas/sim-visuals";
 import { isSplitSource } from "@/lib/registry";
 import { useDesignStore } from "@/stores/design-store";
 import { useSimStore } from "@/stores/sim-store";
 import type { ComponentFlowEdge } from "@/stores/flow-adapter";
-import { edgeChipSegments, type ChipTone } from "./edge-chip";
+import {
+  edgeChipSegments,
+  retryAmplification,
+  type ChipTone,
+} from "./edge-chip";
+import {
+  chipFits,
+  collapsedChip,
+  edgeSpan,
+  placePopover,
+  POPOVER_SIZE,
+  type CollapsedIcon,
+  type FlowRect,
+} from "./edge-layout";
 
 /** Upper bound on the call-edge editor (T-8.3); the engine itself is unbounded. */
 const MAX_CALLS_PER_REQUEST = 100;
@@ -22,8 +45,27 @@ const TONE_CLASS: Record<ChipTone, string | undefined> = {
   rose: "text-rose-400",
 };
 
+const COLLAPSED_ICON: Record<CollapsedIcon, LucideIcon> = {
+  "shield-off": ShieldOff,
+  "shield-alert": ShieldAlert,
+  repeat: Repeat,
+  timer: Timer,
+  ellipsis: Ellipsis,
+};
+
+/** Endpoint node box in flow coordinates; null until React Flow has measured it. */
+function nodeRect(node: InternalNode | undefined): FlowRect | null {
+  const width = node?.measured.width;
+  const height = node?.measured.height;
+  if (!node || !width || !height) return null;
+  const { x, y } = node.internals.positionAbsolute;
+  return { x, y, width, height };
+}
+
 export function FlowEdge({
   id,
+  source,
+  target,
   sourceX,
   sourceY,
   targetX,
@@ -53,6 +95,25 @@ export function FlowEdge({
   const kind = data?.kind ?? "sync";
   const isAuto = isSplit && data?.autoShare !== false;
   const segments = edgeChipSegments(data, edgeFrame);
+  // T-12.4: short edges. Collapse the chip and move the editor off the nodes.
+  const sourceNode = useInternalNode(source);
+  const targetNode = useInternalNode(target);
+  const chipText = segments.map((s) => s.text).join(" · ");
+  const collapsed = !chipFits(
+    chipText,
+    edgeSpan({ x: sourceX, y: sourceY }, { x: targetX, y: targetY }),
+  );
+  const icon = collapsedChip(segments, retryAmplification(edgeFrame));
+  const endpoints = [nodeRect(sourceNode), nodeRect(targetNode)].filter(
+    (r): r is FlowRect => r !== null,
+  );
+  const popover = placePopover(
+    { x: labelX, y: labelY },
+    isSplit ? POPOVER_SIZE.split : POPOVER_SIZE.call,
+    endpoints,
+  );
+  const anchor = selected ? popover.center : { x: labelX, y: labelY };
+  const CollapsedIconCmp = COLLAPSED_ICON[icon.icon];
 
   const live = rps > 0;
   const width = live ? edgeWidth(rps) : selected ? 2 : 1.5;
@@ -82,10 +143,11 @@ export function FlowEdge({
       <EdgeLabelRenderer>
         <div
           className="absolute"
+          data-edge-chip={selected ? "editor" : collapsed ? "icon" : "full"}
           style={{
-            transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
+            transform: `translate(-50%, -50%) translate(${anchor.x}px, ${anchor.y}px)`,
             // the open editor sits above nodes (React Flow paints nodes after
-            // labels), so a short edge's popover isn't hidden under its ends
+            // labels); when displaced (T-12.4) it sits below both endpoints
             zIndex: selected ? 1001 : undefined,
           }}
         >
@@ -163,6 +225,14 @@ export function FlowEdge({
                 <option value="async">async</option>
               </select>
             </div>
+          ) : collapsed ? (
+            <span
+              className={`flex h-[18px] min-w-[18px] items-center justify-center gap-0.5 rounded-full border border-neutral-700 bg-neutral-900 px-1 font-mono text-[10px] ${TONE_CLASS[icon.tone] ?? "text-neutral-400"}`}
+            >
+              <CollapsedIconCmp className="h-2.5 w-2.5" aria-hidden />
+              {icon.text}
+              <span className="sr-only">{chipText}</span>
+            </span>
           ) : (
             <span className="rounded bg-neutral-900/90 px-1.5 py-0.5 font-mono text-[10px] text-neutral-400">
               {segments.map((seg, i) => (
