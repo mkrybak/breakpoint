@@ -391,8 +391,17 @@ export function clientShares(
 /** Simulation clock: 10 ticks/s (dt = 100 ms). */
 export const TICKS_PER_SEC = 10;
 
-/** p95 ≈ 1.6 × mean — the spec's documented approximation. */
-const P95_FACTOR = 1.6;
+/**
+ * p95 ≈ mean + P95_SIGMAS × σ of the client path. 2σ reproduces an
+ * exponential's p95 (ln 20 ≈ 3.0 × mean) for a single M/M/1 hop.
+ */
+const P95_SIGMAS = 2;
+
+/** Mean and variance of a request's time from a node to the end of its sync path. */
+export interface PathMoments {
+  meanMs: number;
+  varianceMs2: number;
+}
 
 /**
  * What the scenario timeline does to one tick. T-2.5's stress rules compile
@@ -501,42 +510,72 @@ export function termMs(term: PathTerm, targetMs: number): number {
 }
 
 /**
- * Mean client-visible latency per reachable node (tick-loop step 4): reverse
- * topo order, path(n) = latencyMs(n) + Σ weight × termMs(term, path(target))
- * over clientPathTerms. Sequential calls sum; LB splits average; async/dead
- * edges add nothing.
+ * Mean and variance of client-visible latency per reachable node (tick-loop
+ * step 4), folded in reverse topo order over clientPathTerms. Node n
+ * contributes its own latencyMs / latencyVarMs2. Each term charges its
+ * target's moments through termMs (m' = termMs(term, m)), treated as a
+ * scale/cap: v' = v × (m'/m)². Calls add (sequential, independent hops:
+ * variances add; a fractional weight w is ⌊w⌋ or ⌈w⌉ calls, adding
+ * f(1−f)·m'² spread, f = w − ⌊w⌋). An LB split is a mixture: variance +=
+ * Σw(v'+m'²) − (Σw·m')². The mean fold is T-8.5's, term for term in the same
+ * order; async/dead edges add nothing.
  */
-export function pathMeansMs(
+export function pathMomentsMap(
   graph: DesignGraph,
   prop: PropagationResult,
   outputs: ReadonlyMap<string, NodeModelOutput>,
   policies: ReadonlyMap<string, EdgePolicy> = new Map(),
-): Map<string, number> {
+): Map<string, PathMoments> {
   const terms = clientPathTerms(graph, prop, outputs, policies);
-  const pathMs = new Map<string, number>();
+  const kindById = new Map(graph.nodes.map((n) => [n.id, n.kind]));
+  const moments = new Map<string, PathMoments>();
   for (let i = prop.order.length - 1; i >= 0; i--) {
     const id = prop.order[i];
     const out = outputs.get(id);
     if (!out) continue;
-    let ms = out.latencyMs;
+    const split = isSplitSource(kindById.get(id));
+    let meanMs = out.latencyMs;
+    let varianceMs2 = out.latencyVarMs2;
+    let mixMean = 0; // split only: Σ w·m'
+    let mixSecond = 0; // split only: Σ w·(v' + m'²)
     for (const term of terms.get(id) ?? []) {
-      ms += term.weight * termMs(term, pathMs.get(term.target) ?? 0);
+      const w = term.weight;
+      const t = moments.get(term.target) ?? { meanMs: 0, varianceMs2: 0 };
+      const m = termMs(term, t.meanMs);
+      const v = t.meanMs > 0 ? t.varianceMs2 * (m / t.meanMs) ** 2 : 0;
+      meanMs += w * m;
+      if (split) {
+        mixMean += w * m;
+        mixSecond += w * (v + m * m);
+      } else {
+        const f = w - Math.floor(w);
+        varianceMs2 += w * v + f * (1 - f) * m * m;
+      }
     }
-    pathMs.set(id, ms);
+    if (split) varianceMs2 += Math.max(0, mixSecond - mixMean * mixMean); // float guard
+    moments.set(id, { meanMs, varianceMs2 });
   }
-  return pathMs;
+  return moments;
 }
 
-/** The entry's mean client-visible latency: pathMeansMs at graph.entryNodeId. */
-export function meanPathMs(
+/** The entry's path moments: pathMomentsMap at graph.entryNodeId; zero moments without an entry. */
+export function pathMoments(
   graph: DesignGraph,
   prop: PropagationResult,
   outputs: ReadonlyMap<string, NodeModelOutput>,
   policies: ReadonlyMap<string, EdgePolicy> = new Map(),
-): number {
+): PathMoments {
   return (
-    pathMeansMs(graph, prop, outputs, policies).get(graph.entryNodeId) ?? 0
+    pathMomentsMap(graph, prop, outputs, policies).get(graph.entryNodeId) ?? {
+      meanMs: 0,
+      varianceMs2: 0,
+    }
   );
+}
+
+/** p95 ≈ mean + 2σ. */
+export function p95FromMoments({ meanMs, varianceMs2 }: PathMoments): number {
+  return meanMs + P95_SIGMAS * Math.sqrt(varianceMs2);
 }
 
 /** A stepping simulation: per-run state lives in the closure. */
@@ -744,7 +783,7 @@ export function createSimRun(
         }
       }
 
-      const pathMs = pathMeansMs(graph, prop, outputs, policies);
+      const pathMs = pathMomentsMap(graph, prop, outputs, policies);
       const edgeTicks = new Map<string, EdgeTick>();
       for (const edge of graph.edges) {
         const policy = policies.get(edge.id);
@@ -754,7 +793,7 @@ export function createSimRun(
           fresh: prop.freshPerEdge[edge.id],
           dead: dead.has(edge.id),
           rejectFraction: outputs.get(edge.target)?.rejectFraction ?? 0,
-          targetPathMs: pathMs.get(edge.target) ?? 0,
+          targetPathMs: pathMs.get(edge.target)?.meanMs ?? 0,
           admit: edgePass[edge.id] ?? 1,
         });
         edgeStates.set(edge.id, step.next);
@@ -797,7 +836,9 @@ export function createSimRun(
         t: tick / TICKS_PER_SEC,
         perNode,
         perEdge,
-        p95Ms: P95_FACTOR * (pathMs.get(graph.entryNodeId) ?? 0),
+        p95Ms: p95FromMoments(
+          pathMs.get(graph.entryNodeId) ?? { meanMs: 0, varianceMs2: 0 },
+        ),
         errorRate:
           effects.offeredRps > 0
             ? Math.min(1, clientDropped / effects.offeredRps)

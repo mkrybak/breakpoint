@@ -54,6 +54,10 @@ function graph(
   return { nodes, edges, entryNodeId };
 }
 
+/** p95 ≈ mean + 2σ, mirroring the engine's estimate (T-8.7). */
+const p95 = (meanMs: number, varianceMs2: number) =>
+  meanMs + 2 * Math.sqrt(varianceMs2);
+
 function scenario(overrides: Partial<Scenario> = {}): Scenario {
   return {
     id: "s",
@@ -406,10 +410,12 @@ describe("simulate — golden 4: spike drain", () => {
     ]);
     expect(frames[10].events).toEqual(["app saturated at 4k RPS"]);
     expect(frames[11].events).toEqual(["app recovered"]);
-    // latency mirrors the engine's formula: client 1ms + app M/M/1 + wait
-    expect(frames[0].p95Ms).toBe(1.6 * (1 + 8 / (1 - 0.5)));
-    expect(frames[6].p95Ms).toBe(1.6 * (1 + (8 / (1 - 0.95) + 500)));
-    expect(frames[10].p95Ms).toBe(1.6 * (1 + 8 / (1 - 0.95)));
+    // latency mirrors the engine's formula: client 1ms + app M/M/1 + wait;
+    // only the M/M/1 part is random (variance = its mean²), the wait is a shift
+    const sat = 8 / (1 - 0.95); // 160
+    expect(frames[0].p95Ms).toBeCloseTo(p95(1 + 16, 1 + 16 * 16), 9); // 49.06
+    expect(frames[6].p95Ms).toBeCloseTo(p95(1 + (sat + 500), 1 + sat * sat), 9); // 981.01
+    expect(frames[10].p95Ms).toBeCloseTo(p95(1 + sat, 1 + sat * sat), 9); // 481.01
     expect(frames[11].p95Ms).toBe(frames[0].p95Ms);
     expect(frames.map((f) => f.errorRate)).toEqual([
       0, 0, 0, 0, 0, 0, 2000 / 6000, 2000 / 6000, 2000 / 6000, 2000 / 6000,
@@ -423,7 +429,7 @@ describe("simulate — golden 4: spike drain", () => {
 });
 
 describe("simulate — latency path", () => {
-  it("a cache's DB call charges only misses + writes (3600/10000), not callsPerRequest", () => {
+  it("a cache's DB call charges only misses + writes (3600/10000), not callsPerRequest; the miss share widens the tail", () => {
     const g = graph(
       [
         node("c", "client"),
@@ -439,7 +445,14 @@ describe("simulate — latency path", () => {
     expect(frames).toHaveLength(1);
     const cacheMs = 1 / (1 - 0.08); // util = max(8000, 2000)/100k = 0.08
     const dbMs = 5 / (1 - 2000 / 15000); // write-bound: 2000 vs 15k ceiling
-    expect(frames[0].p95Ms).toBe(1.6 * (1 + (cacheMs + (3600 / 10000) * dbMs)));
+    const w = 3600 / 10000;
+    expect(frames[0].p95Ms).toBeCloseTo(
+      p95(
+        1 + cacheMs + w * dbMs,
+        1 + cacheMs * cacheMs + w * dbMs * dbMs + w * (1 - w) * dbMs * dbMs,
+      ),
+      9,
+    ); // 13.51
     expect(frames[0].perEdge["e-cache-db"].rps).toBe(3600);
   });
 
@@ -452,9 +465,18 @@ describe("simulate — latency path", () => {
     const appMs = 8 / (1 - 0.5); // 2000 / 4000
     const cacheMs = 1 / (1 - 2000 / 100000);
     const dbMs = 5 / (1 - 2000 / 30000);
-    expect(f.p95Ms).toBe(1.6 * (1 + ((appMs + cacheMs) + dbMs))); // 37.404…
+    expect(f.p95Ms).toBeCloseTo(
+      p95(1 + appMs + cacheMs + dbMs, 1 + appMs * appMs + cacheMs * cacheMs + dbMs * dbMs),
+      9,
+    ); // 57.24
     // the pre-M8 average (0.5/0.5 shares) would have paid half of each
-    expect(f.p95Ms).toBeGreaterThan(1.6 * (1 + appMs + 0.5 * cacheMs + 0.5 * dbMs));
+    // (two half-weight calls: 0.5·m² + 0.25·m² spread each)
+    expect(f.p95Ms).toBeGreaterThan(
+      p95(
+        1 + appMs + 0.5 * cacheMs + 0.5 * dbMs,
+        1 + appMs * appMs + 0.75 * cacheMs * cacheMs + 0.75 * dbMs * dbMs,
+      ),
+    );
   });
 
   it("a fractional call pays its fraction (cache-aside: 20% of requests hit the DB)", () => {
@@ -467,7 +489,13 @@ describe("simulate — latency path", () => {
     const cacheMs = 1 / (1 - 2000 / 100000);
     const dbMs = 5 / (1 - 400 / 30000);
     expect(f.perEdge["e-app-db"].rps).toBe(400);
-    expect(f.p95Ms).toBe(1.6 * (1 + ((appMs + cacheMs) + (400 / 2000) * dbMs))); // 30.454…
+    expect(f.p95Ms).toBeCloseTo(
+      p95(
+        1 + appMs + cacheMs + 0.2 * dbMs,
+        1 + appMs * appMs + cacheMs * cacheMs + 0.2 * dbMs * dbMs + 0.2 * 0.8 * dbMs * dbMs,
+      ),
+      9,
+    ); // 51.73
   });
 
   it("an LB split averages its backends", () => {
@@ -478,7 +506,11 @@ describe("simulate — latency path", () => {
     const [f] = simulate(g, scenario({ durationSec: 0.1, readRatio: 1 }));
     const lbMs = 1 / (1 - 2000 / 100000);
     const backendMs = 8 / (1 - 1000 / 4000);
-    expect(f.p95Ms).toBe(1.6 * (1 + ((lbMs + 0.5 * backendMs) + 0.5 * backendMs))); // 20.299…
+    // identical backends: the mixture adds no spread
+    expect(f.p95Ms).toBeCloseTo(
+      p95(1 + lbMs + backendMs, 1 + lbMs * lbMs + backendMs * backendMs),
+      9,
+    ); // 34.21
   });
 
   it("an LB with a partitioned backend charges the live backend in full", () => {
@@ -491,7 +523,10 @@ describe("simulate — latency path", () => {
     const lbMs = 1 / (1 - 2000 / 100000);
     const backendMs = 8 / (1 - 1000 / 4000);
     expect(f.perEdge["e-lb-b"].rps).toBe(0);
-    expect(f.p95Ms).toBe(1.6 * (1 + (lbMs + backendMs))); // 20.299…; pre-T-8.4: 11.766
+    expect(f.p95Ms).toBeCloseTo(
+      p95(1 + lbMs + backendMs, 1 + lbMs * lbMs + backendMs * backendMs),
+      9,
+    ); // 34.21; pre-T-8.7: 20.299; pre-T-8.4: 11.766
   });
 
   it("a dead (partitioned) call adds no latency", () => {
@@ -502,7 +537,7 @@ describe("simulate — latency path", () => {
     const cut: ApplyRulesFn = (_t, s) => ({ offeredRps: s.baseRps, deadEdges: ["e-app-db"] });
     const [f] = simulate(g, scenario({ durationSec: 0.1, readRatio: 1 }), cut);
     expect(f.perEdge["e-app-db"].rps).toBe(0);
-    expect(f.p95Ms).toBe(1.6 * (1 + 8 / (1 - 0.5))); // 27.2
+    expect(f.p95Ms).toBeCloseTo(p95(1 + 16, 1 + 16 * 16), 9); // 49.06
   });
 
   it("keeps async subtrees off the client latency path", () => {
@@ -528,7 +563,7 @@ describe("simulate — latency path", () => {
       lagSec: 0.1,
     });
     expect(frames[0].errorRate).toBe(0);
-    expect(frames[0].p95Ms).toBe(1.6 * (1 + 8 / (1 - 0.5)));
+    expect(frames[0].p95Ms).toBeCloseTo(p95(1 + 16, 1 + 16 * 16), 9);
   });
 
   it("stops the client path at a queue: consumers behind it add no latency", () => {
@@ -550,8 +585,25 @@ describe("simulate — latency path", () => {
     const queueMs = 4 / (1 - 1500 / 800000); // enqueue cost only
     for (const f of frames) {
       expect(f.perNode["w"].state).toBe("saturated");
-      expect(f.p95Ms).toBe(1.6 * (1 + (appMs + queueMs)));
+      expect(f.p95Ms).toBeCloseTo(
+        p95(1 + appMs + queueMs, 1 + appMs * appMs + queueMs * queueMs),
+        9,
+      );
     }
+  });
+
+  it("an LB split is a mixture: branch spread adds to the tail, not the mean", () => {
+    const g = graph(
+      [node("c", "client"), node("lb", "lb"), node("a1", "app_server", { replicas: 1 }), node("a2", "app_server", { replicas: 3 })],
+      [edge("c", "lb"), edge("lb", "a1", { trafficShare: 0.5 }), edge("lb", "a2", { trafficShare: 0.5 })],
+    );
+    const frames = simulate(g, scenario({ durationSec: 0.1, baseRps: 4000, readRatio: 0 }));
+    const lbMs = 1 / (1 - 0.04); // 4000 / 100k
+    const a1 = 8 / (1 - 0.5); // 2000 / 4000 → 16
+    const a2 = 8 / (1 - 2000 / 12000); // → 9.6
+    const mixMean = 0.5 * a1 + 0.5 * a2;
+    const mixVar = 0.5 * (2 * a1 * a1) + 0.5 * (2 * a2 * a2) - mixMean * mixMean;
+    expect(frames[0].p95Ms).toBeCloseTo(p95(1 + lbMs + mixMean, 1 + lbMs * lbMs + mixVar), 9); // 42.15
   });
 
   it("stays total on a graph without an entry node", () => {
@@ -853,7 +905,9 @@ describe("simulate — timeouts and retries (T-8.5)", () => {
     );
     const [frame] = simulate(g, scenario({ durationSec: 0.1, baseRps: 2000 }));
     expect(frame.errorRate).toBeCloseTo(Math.exp(-100 / 16), 12);
-    expect(frame.p95Ms).toBe(1.6 * (1 + 16 * (1 - Math.exp(-100 / 16))));
+    const capped = 16 * (1 - Math.exp(-100 / 16)); // E[min(T, 100)]
+    // a cap scales the target's spread with its mean: v' = v × (m'/m)²
+    expect(frame.p95Ms).toBeCloseTo(p95(1 + capped, 1 + 256 * (capped / 16) ** 2), 9);
     expect(frame.perEdge["e-c-dep"]).toEqual({
       rps: 2000,
       retryRps: 0,

@@ -20,7 +20,7 @@
       "kind": "app_server",
       "label": "App fleet",
       "position": { "x": 400, "y": 200 },
-      "config": { "replicas": 8 }
+      "config": { "replicas": 9 }
     },
     {
       "id": "cache",

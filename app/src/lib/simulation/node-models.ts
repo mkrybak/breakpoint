@@ -122,6 +122,11 @@ export interface NodeModelOutput {
   util: number;
   /** mean ms a request spends at this node: M/M/1 service time + queue wait */
   latencyMs: number;
+  /**
+   * variance (ms²) of the time a request spends here: the M/M/1 part is
+   * exponential (variance = its mean²); backlog wait is a fixed shift (0)
+   */
+  latencyVarMs2: number;
   state: NodeState;
 }
 
@@ -167,7 +172,8 @@ export function callLatencyMs(
 }
 
 /**
- * The spec's tick-loop step 3 plus the per-node half of step 4 — latency —
+ * The spec's tick-loop step 3 plus the per-node half of step 4 — latency
+ * mean and variance —
  * (03-simulation-engine.md), shared by every
  * kind — only the capacity computation varies. All quantities stay in the
  * spec's literal RPS units; the queue backlog re-enters demand next tick and
@@ -208,6 +214,7 @@ export function makeModel(capacity: CapacityFn): NodeModel {
     const queueWaitMs = queuedTotal > 0 ? (queuedTotal / totalCap) * 1000 : 0;
     const dropped = overflowTotal - queuedTotal;
     const arrivals = flowRps(inflow);
+    const sojournMs = def.latency.baseMs / (1 - Math.min(util, MAX_MM1_UTIL));
 
     return {
       served,
@@ -215,8 +222,8 @@ export function makeModel(capacity: CapacityFn): NodeModel {
       dropped,
       rejectFraction: arrivals > 0 ? Math.min(1, dropped / arrivals) : 0,
       util,
-      latencyMs:
-        def.latency.baseMs / (1 - Math.min(util, MAX_MM1_UTIL)) + queueWaitMs,
+      latencyMs: sojournMs + queueWaitMs,
+      latencyVarMs2: sojournMs * sojournMs,
       state: nodeState(util, totalCap),
     };
   };
@@ -259,13 +266,15 @@ export function makeBufferModel(capacity: CapacityFn): NodeModel {
     const util = Math.max(ingestUtil, ratio(overflowTotal, retention));
     const dropped = overflowTotal - queuedTotal;
     const arrivals = flowRps(inflow);
+    const enqueueMs = def.latency.baseMs / (1 - Math.min(ingestUtil, MAX_MM1_UTIL));
     return {
       served,
       queued: splitByFlow(overflow, overflowTotal, queuedTotal),
       dropped,
       rejectFraction: arrivals > 0 ? Math.min(1, dropped / arrivals) : 0,
       util,
-      latencyMs: def.latency.baseMs / (1 - Math.min(ingestUtil, MAX_MM1_UTIL)),
+      latencyMs: enqueueMs,
+      latencyVarMs2: enqueueMs * enqueueMs,
       state: nodeState(util, ownCap),
     };
   };

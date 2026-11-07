@@ -8,6 +8,7 @@ import {
   formatPct,
   formatRps,
   hasAsyncNodes,
+  P95_HINT,
 } from "@/components/hud/hud-format";
 import { useDesignStore } from "@/stores/design-store";
 import { useScenarioStore } from "@/stores/scenario-store";
@@ -121,6 +122,7 @@ export function MetricsBar({
       <div className="ml-auto flex items-center gap-2">
         <Metric
           label="p95"
+          hint={P95_HINT}
           value={live ? formatMs(agg.p95Ms) : "—"}
           sub={live ? `peak ${formatMs(agg.peakP95Ms)}` : undefined}
         />
@@ -227,6 +229,7 @@ function SimpleBar({
         />
         <Metric
           label="p95"
+          hint={P95_HINT}
           compact={hasAsync}
           value={live ? formatMs(agg.p95Ms) : "—"}
         />
@@ -253,23 +256,32 @@ function Metric({
   value,
   sub,
   title,
+  hint,
   compact = false,
 }: {
   label: string;
   value: string;
   sub?: string;
   title?: string;
+  /** explains how the number is derived: native tooltip + dotted label */
+  hint?: string;
   /** tighter card (Quick bar with four metrics) */
   compact?: boolean;
 }) {
   return (
     <div
-      title={title}
+      title={hint ?? title}
       className={`rounded-lg border border-neutral-800 bg-neutral-900 py-1 ${
         compact ? "min-w-16 px-2" : "min-w-20 px-3"
-      }`}
+      }${hint ? " cursor-help" : ""}`}
     >
-      <div className="text-[9px] font-medium tracking-wider whitespace-nowrap text-neutral-500 uppercase">
+      <div
+        className={`text-[9px] font-medium tracking-wider whitespace-nowrap text-neutral-500 uppercase${
+          hint
+            ? " underline decoration-neutral-500 decoration-dotted underline-offset-2"
+            : ""
+        }`}
+      >
         {label}
       </div>
       <div className="truncate font-mono text-sm text-neutral-100">{value}</div>

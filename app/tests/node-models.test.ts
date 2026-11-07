@@ -188,6 +188,7 @@ describe("serve math", () => {
       rejectFraction: 0,
       util: 0,
       latencyMs: 8,
+      latencyVarMs2: 64,
       state: "ok",
     });
   });
@@ -273,6 +274,12 @@ describe("latency (M/M/1 + queue wait)", () => {
     // queued 1000 → wait (1000/4000)×1000 = 250ms; then 2000 → 500ms
     expect(ticks[0].latencyMs).toBe(8 / (1 - 0.95) + 250);
     expect(ticks[1].latencyMs).toBe(8 / (1 - 0.95) + 500);
+  });
+
+  it("variance is the M/M/1 part squared; backlog wait adds none", () => {
+    expect(tick(node("app"), { read: 2000, write: 0 }).latencyVarMs2).toBe(16 * 16);
+    const ticks = runTicks(node("app"), [{ read: 5000, write: 0 }, { read: 5000, write: 0 }]);
+    expect(ticks[1].latencyVarMs2).toBe((8 / (1 - 0.95)) ** 2); // the 500ms wait is a shift
   });
 
   it("unlimited nodes sit at baseMs", () => {

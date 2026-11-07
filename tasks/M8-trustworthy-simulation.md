@@ -57,7 +57,8 @@ Every task updates [[03-simulation-engine]] (spec + Decisions) and adds or adjus
 **Accept:** An optional per-edge breaker: it opens when the target's error rate passes a threshold for N ticks, fails fast (no load on the target, errors at the caller) while open, then half-opens after a cooldown. Event log lines for open, half-open and closed. Golden test: the T-8.5 retry storm recovers with the breaker on.
 
 ### T-8.7 — More honest tail latency
-- [ ] T-8.7 done
+- [x] T-8.7 done
+  - Also touched the HUD p95 tooltip (`hud-format.ts` `P95_HINT`, `MetricsBar.tsx` `hint` prop) and set `examples/twitter.json` app replicas 8 → 9; the p95 label underline was lifted to neutral-500 in lead review (neutral-600 was invisible).
 
 **Files:** `src/lib/simulation/engine.ts`, `src/lib/simulation/node-models.ts`
 **Accept:** Replace the fixed `p95 = 1.6 × mean` (`engine.ts:287`). Note that M/M/1 time-in-system is exponential, so p95 ≈ ln(20) × mean ≈ 3.0 × mean, meaning the current factor *understates* the tail. The plan picks and documents an approximation (per-node percentile composition, or a utilization-dependent factor) and explains it in the UI tooltip. Golden tests are updated, with old → new numbers recorded in the Decisions entry.
@@ -83,3 +84,5 @@ Every task updates [[03-simulation-engine]] (spec + Decisions) and adds or adjus
 - T-8.6: breaker trips on the edge's call failure rate (incl. timeouts), half-open = one tick at 10% probe; inspector = checkbox + 3 exposed fields (50% · 0.5 s · 5 s); new files simulation/breaker.ts, panels/BreakerControls.tsx; toggles recorded for the grader.
 - 2026-11-07 (T-8.6, lead call): the breaker trips on the edge's own call failure rate (drops + timeouts, over admitted calls), strictly above the threshold for N ticks; half-open is one tick that lets 10% of calls through as a probe; defaults are 50% · 0.5 s · 5 s; rejected calls schedule no retries; an LB edge's breaker rejects its own share without rerouting.
 - 2026-11-07 (T-8.6, lead review): edge-panel number fields keep a draft while you type and clamp on blur/Enter (per-keystroke clamping made "30" or "0.5" untypeable).
+- T-8.7: p95 = mean + 2σ (per-node M/M/1 variance, calls add, LB splits mix). Files deviation: HUD p95 tooltip (`hud-format.ts`, `MetricsBar.tsx`) and `examples/twitter.json` app replicas 8 → 9 so the M2 demo keeps passing Black Friday with honest headroom (old peak p95 213 → 390 ms at util 0.94).
+- 2026-11-07 (T-8.7, lead call): p95 = mean + 2σ from per-node M/M/1 variance (calls add, LB splits mix, backlog wait is a shift). Goldens moved (e.g. single hop 27.2 → 49.1 ms, saturated + backlog 1057.6 → 981.0); only verdict flip is black-friday × twitter, so twitter.json gets 9 app replicas (peak 213 → 150 ms) instead of loosening the preset's 250 ms budget. CDN designs under black-friday/celebrity already failed on errors, so their verdicts are unchanged, but they now also breach p95 (228 → 684 ms, 180 → 598 ms).

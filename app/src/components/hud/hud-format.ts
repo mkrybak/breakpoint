@@ -13,6 +13,10 @@ export function formatMs(ms: number): string {
   return `${Math.round(ms)} ms`;
 }
 
+/** Tooltip on the HUD's p95 card: how the number is estimated (03-simulation-engine step 4). */
+export const P95_HINT =
+  "95% of requests finish faster than this: estimated as the average response time plus two standard deviations, and because a component's delay gets more variable as it gets busier, p95 climbs faster than the average.";
+
 /** Error rate 0–1 → "3.2%". */
 export function formatPct(rate: number): string {
   return `${(rate * 100).toFixed(1)}%`;
