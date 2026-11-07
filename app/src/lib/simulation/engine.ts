@@ -12,6 +12,7 @@ import { getComponentDef, isSplitSource } from "@/lib/registry";
 // ./node-models imports ./engine back (Flow + config helpers). The cycle is
 // init-safe: neither module reads the other's bindings until a function runs.
 import {
+  callLatencyMs,
   consumerHeadroomRps,
   consumerLagSec,
   getCapacityFn,
@@ -20,6 +21,15 @@ import {
   type NodeModelOutput,
 } from "./node-models";
 import { mulberry32, type Rng } from "./rng";
+import {
+  buildEdgePolicies,
+  initialEdgeState,
+  pendingRetries,
+  stepEdge,
+  type EdgePolicy,
+  type EdgeState,
+  type EdgeTick,
+} from "./edge-state";
 
 /**
  * Traffic is tracked as a read/write pair end-to-end: the cache split absorbs
@@ -196,6 +206,8 @@ export interface PropagationResult {
   perNode: Record<string, NodeTraffic>;
   /** every edge id appears; edges off any reachable path carry zero */
   perEdge: Record<string, Flow>;
+  /** flow each edge's source sent before retries; zero on dead/unused edges, === perEdge's value when no retry rode along */
+  freshPerEdge: Record<string, Flow>;
   /** flow a dead (partitioned) edge stranded at its source, per node id */
   unroutable: Record<string, Flow>;
 }
@@ -208,6 +220,8 @@ export interface PropagationOverrides {
   hitRate?: Record<string, number>;
   /** edge ids carrying no traffic this tick */
   deadEdges?: readonly string[];
+  /** edge id → retry flow re-offered on top of the edge's fresh flow this tick (T-8.5) */
+  retryFlow?: Record<string, Flow>;
 }
 
 /** T-2.3 plugs the capacity model in here; default = serve everything. */
@@ -256,8 +270,14 @@ export function propagateTraffic(
     unroutable[n.id] = zeroFlow();
   }
   const perEdge: Record<string, Flow> = {};
-  for (const e of graph.edges) perEdge[e.id] = zeroFlow();
-  if (order.length === 0) return { order, perNode, perEdge, unroutable };
+  const freshPerEdge: Record<string, Flow> = {};
+  for (const e of graph.edges) {
+    perEdge[e.id] = zeroFlow();
+    freshPerEdge[e.id] = zeroFlow();
+  }
+  if (order.length === 0) {
+    return { order, perNode, perEdge, freshPerEdge, unroutable };
+  }
   const dead = new Set(overrides.deadEdges ?? []);
 
   const nodeById = new Map(graph.nodes.map((n) => [n.id, n]));
@@ -280,12 +300,15 @@ export function propagateTraffic(
       const to = position.get(edge.target);
       // back/self edges (cycles) and edges into the entry carry nothing
       if (to === undefined || to <= (position.get(id) ?? 0)) continue;
-      const flow = scaleFlow(forwarded, edgeMultiplier(edge, node.kind));
+      const fresh = scaleFlow(forwarded, edgeMultiplier(edge, node.kind));
+      const retry = overrides.retryFlow?.[edge.id];
+      const flow = retry ? addFlow(fresh, retry) : fresh;
       if (dead.has(edge.id)) {
         unroutable[id] = addFlow(unroutable[id], flow);
         continue;
       }
       perEdge[edge.id] = flow;
+      freshPerEdge[edge.id] = fresh;
       const target = perNode[edge.target];
       if (edge.kind === "async") {
         target.asyncArrivals = addFlow(target.asyncArrivals, flow);
@@ -294,7 +317,7 @@ export function propagateTraffic(
       }
     }
   }
-  return { order, perNode, perEdge, unroutable };
+  return { order, perNode, perEdge, freshPerEdge, unroutable };
 }
 
 /**
@@ -384,8 +407,13 @@ export interface PathTerm {
    *   pass-through (a cache passes only misses + writes) — calls ADD.
    * split (LB source): flow(e) / Σ flow over its forward sync edges —
    *   backends AVERAGE over live edges.
+   * Computed from fresh flows, so retries never change it (T-8.5).
    */
   weight: number;
+  /** expected attempts per call this tick: attempts / fresh on the edge (1 without retries) */
+  attempts: number;
+  /** the edge's timeout, if any */
+  timeoutMs?: number;
 }
 
 /**
@@ -398,6 +426,7 @@ export function clientPathTerms(
   graph: DesignGraph,
   prop: PropagationResult,
   outputs: ReadonlyMap<string, NodeModelOutput>,
+  policies: ReadonlyMap<string, EdgePolicy> = new Map(),
 ): Map<string, PathTerm[]> {
   const position = new Map(prop.order.map((id, i) => [id, i]));
   const nodeById = new Map(graph.nodes.map((n) => [n.id, n]));
@@ -413,32 +442,53 @@ export function clientPathTerms(
       const to = position.get(edge.target);
       return to !== undefined && to > i;
     });
-    const flows = edges.map((edge) => flowRps(prop.perEdge[edge.id]));
+    const flows = edges.map((edge) => flowRps(prop.freshPerEdge[edge.id]));
     const denominator = isSplitSource(node.kind)
       ? flows.reduce((sum, f) => sum + f, 0)
       : flowRps(out.served);
     terms.set(
       id,
-      edges.map((edge, k) => ({
-        target: edge.target,
-        weight: denominator > 0 ? flows[k] / denominator : 0,
-      })),
+      edges.map((edge, k) => {
+        const policy = policies.get(edge.id);
+        return {
+          target: edge.target,
+          weight: denominator > 0 ? flows[k] / denominator : 0,
+          attempts:
+            policy && flows[k] > 0
+              ? flowRps(prop.perEdge[edge.id]) / flows[k]
+              : 1,
+          ...(policy?.timeoutMs !== undefined
+            ? { timeoutMs: policy.timeoutMs }
+            : {}),
+        };
+      }),
     );
   });
   return terms;
 }
 
 /**
- * Mean client-visible latency (tick-loop step 4): reverse topo order,
- * path(n) = latencyMs(n) + Σ weight × path(target) over clientPathTerms.
- * Sequential calls sum; LB splits average; async/dead edges add nothing.
+ * Latency one term charges per unit weight, given its target's mean path:
+ * attempts × E[min(T, timeout)] (T-8.5). The single per-term transform;
+ * T-8.7 treats it as a scale/cap.
  */
-export function meanPathMs(
+export function termMs(term: PathTerm, targetMs: number): number {
+  return term.attempts * callLatencyMs(targetMs, term.timeoutMs);
+}
+
+/**
+ * Mean client-visible latency per reachable node (tick-loop step 4): reverse
+ * topo order, path(n) = latencyMs(n) + Σ weight × termMs(term, path(target))
+ * over clientPathTerms. Sequential calls sum; LB splits average; async/dead
+ * edges add nothing.
+ */
+export function pathMeansMs(
   graph: DesignGraph,
   prop: PropagationResult,
   outputs: ReadonlyMap<string, NodeModelOutput>,
-): number {
-  const terms = clientPathTerms(graph, prop, outputs);
+  policies: ReadonlyMap<string, EdgePolicy> = new Map(),
+): Map<string, number> {
+  const terms = clientPathTerms(graph, prop, outputs, policies);
   const pathMs = new Map<string, number>();
   for (let i = prop.order.length - 1; i >= 0; i--) {
     const id = prop.order[i];
@@ -446,11 +496,23 @@ export function meanPathMs(
     if (!out) continue;
     let ms = out.latencyMs;
     for (const term of terms.get(id) ?? []) {
-      ms += term.weight * (pathMs.get(term.target) ?? 0);
+      ms += term.weight * termMs(term, pathMs.get(term.target) ?? 0);
     }
     pathMs.set(id, ms);
   }
-  return pathMs.get(graph.entryNodeId) ?? 0;
+  return pathMs;
+}
+
+/** The entry's mean client-visible latency: pathMeansMs at graph.entryNodeId. */
+export function meanPathMs(
+  graph: DesignGraph,
+  prop: PropagationResult,
+  outputs: ReadonlyMap<string, NodeModelOutput>,
+  policies: ReadonlyMap<string, EdgePolicy> = new Map(),
+): number {
+  return (
+    pathMeansMs(graph, prop, outputs, policies).get(graph.entryNodeId) ?? 0
+  );
 }
 
 /** A stepping simulation: per-run state lives in the closure. */
@@ -464,8 +526,9 @@ export interface SimRun {
  * propagate → node models → latency → frame, one tick per call. Total on any
  * input and pure: the only randomness is mulberry32(scenario.seed) handed to
  * `applyRules`, so the same (graph, scenario, seed) always yields
- * byte-identical frames. simulate() drains it in one go; the worker paces it
- * in real time.
+ * byte-identical frames. Policy edges (timeouts/retries, T-8.5) carry
+ * EdgeState tick-to-tick; no RNG, so determinism holds. simulate() drains it
+ * in one go; the worker paces it in real time.
  */
 export function createSimRun(
   graph: DesignGraph,
@@ -497,6 +560,10 @@ export function createSimRun(
     if (getComponentDef(src.kind).category !== "async") continue;
     consumers.set(e.source, [...(consumers.get(e.source) ?? []), e]);
   }
+  const policies = buildEdgePolicies(graph);
+  const edgeStates = new Map<string, EdgeState>(
+    [...policies].map(([id, policy]) => [id, initialEdgeState(policy)]),
+  );
   let tickIndex = 0;
 
   return {
@@ -555,11 +622,16 @@ export function createSimRun(
         outputs.set(node.id, out);
         return out;
       };
+      const retryFlow: Record<string, Flow> = {};
+      for (const [id, state] of edgeStates) {
+        const retry = pendingRetries(state);
+        if (flowRps(retry) > 0) retryFlow[id] = retry;
+      }
       const prop = propagateTraffic(
         graph,
         splitFlow(effects.offeredRps, scenario.readRatio),
         (node, def, inflow) => evaluate(node, def, inflow).served,
-        { hitRate: effects.hitRate, deadEdges: effects.deadEdges },
+        { hitRate: effects.hitRate, deadEdges: effects.deadEdges, retryFlow },
       );
       const shares = clientShares(graph, prop, clientSharePrev);
 
@@ -607,16 +679,43 @@ export function createSimRun(
         }
       }
 
+      const pathMs = pathMeansMs(graph, prop, outputs, policies);
+      const edgeTicks = new Map<string, EdgeTick>();
+      for (const edge of graph.edges) {
+        const policy = policies.get(edge.id);
+        const state = edgeStates.get(edge.id);
+        if (!policy || !state) continue;
+        const step = stepEdge(policy, state, {
+          fresh: prop.freshPerEdge[edge.id],
+          dead: dead.has(edge.id),
+          rejectFraction: outputs.get(edge.target)?.rejectFraction ?? 0,
+          targetPathMs: pathMs.get(edge.target) ?? 0,
+        });
+        edgeStates.set(edge.id, step.next);
+        edgeTicks.set(edge.id, step);
+        // retried drops are not errors yet; given-up timeouts are (T-8.5)
+        const adjust = step.exhaustedRps - step.rejectedRps;
+        const share = shares.get(edge.source) ?? 0;
+        clientDropped += adjust * share;
+        asyncDropped += adjust - adjust * share;
+      }
+      clientDropped = Math.max(0, clientDropped);
+      asyncDropped = Math.max(0, asyncDropped);
+
       const perEdge: SimFrame["perEdge"] = {};
       for (const edge of graph.edges) {
-        perEdge[edge.id] = { rps: flowRps(prop.perEdge[edge.id]) };
+        const rps = flowRps(prop.perEdge[edge.id]);
+        const step = edgeTicks.get(edge.id);
+        perEdge[edge.id] = step
+          ? { rps, retryRps: step.retryRps, failRate: step.failRate }
+          : { rps };
       }
 
       return {
         t: tick / TICKS_PER_SEC,
         perNode,
         perEdge,
-        p95Ms: P95_FACTOR * meanPathMs(graph, prop, outputs),
+        p95Ms: P95_FACTOR * (pathMs.get(graph.entryNodeId) ?? 0),
         errorRate:
           effects.offeredRps > 0
             ? Math.min(1, clientDropped / effects.offeredRps)

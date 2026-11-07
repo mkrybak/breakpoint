@@ -1,0 +1,11 @@
+{
+  "id": "dependency-blip",
+  "name": "Dependency blip",
+  "description": "Traffic doubles for one second; can the dependency recover?",
+  "durationSec": 20,
+  "baseRps": 3000,
+  "readRatio": 1,
+  "timeline": [{ "at": 5, "rule": "spike", "factor": 2, "forSec": 1 }],
+  "pass": { "p95Ms": 250, "maxErrorRate": 0.01 },
+  "seed": 42
+}

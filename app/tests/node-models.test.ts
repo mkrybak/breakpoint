@@ -9,11 +9,13 @@ import {
 } from "../src/lib/simulation/engine";
 import {
   bufferModel,
+  callLatencyMs,
   consumerHeadroomRps,
   consumerLagSec,
   defaultModel,
   formatRps,
   getNodeModel,
+  timeoutFraction,
   transitionEvent,
   type NodeModelOutput,
 } from "../src/lib/simulation/node-models";
@@ -183,10 +185,35 @@ describe("serve math", () => {
       served: zeroFlow(),
       queued: zeroFlow(),
       dropped: 0,
+      rejectFraction: 0,
       util: 0,
       latencyMs: 8,
       state: "ok",
     });
+  });
+});
+
+describe("tail-drop and timeouts (T-8.5)", () => {
+  it("rejectFraction = this tick's drops / this tick's arrivals", () => {
+    const inflow: Flow = { read: 6000, write: 0 };
+    const [first, second] = runTicks(node("app"), [inflow, inflow]);
+    // cap 4000, queue 2000: the first tick queues the overflow, drops nothing
+    expect(first.dropped).toBe(0);
+    expect(first.rejectFraction).toBe(0);
+    // backlog 2000 + 6000 arrivals: 4000 served, 2000 queued, 2000 dropped
+    expect(second.dropped).toBe(2000);
+    expect(second.rejectFraction).toBe(2000 / 6000);
+  });
+
+  it("timeoutFraction is the exponential tail P(T > t)", () => {
+    expect(timeoutFraction(0, 100)).toBe(0);
+    expect(timeoutFraction(50, 100)).toBe(Math.exp(-2));
+  });
+
+  it("callLatencyMs is E[min(T, t)]", () => {
+    expect(callLatencyMs(16, undefined)).toBe(16);
+    expect(callLatencyMs(0, 100)).toBe(0);
+    expect(callLatencyMs(50, 100)).toBe(50 * (1 - Math.exp(-2)));
   });
 });
 

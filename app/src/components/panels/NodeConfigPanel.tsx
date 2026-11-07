@@ -9,13 +9,11 @@ import {
   parseDesignRecord,
 } from "@/persistence/local";
 import { useDesignStore } from "@/stores/design-store";
+import { EdgeInspector } from "./EdgeInspector";
+import { FIELD_LABEL, INPUT } from "./styles";
 
 const BUTTON =
   "rounded-lg border border-neutral-800 bg-neutral-900 px-2.5 py-1.5 text-xs font-medium text-neutral-200 hover:border-neutral-600";
-const FIELD_LABEL =
-  "text-[10px] font-medium tracking-wider text-neutral-500 uppercase";
-const INPUT =
-  "mt-1 w-full rounded border border-neutral-700 bg-neutral-800 px-2 py-1 text-xs text-neutral-100";
 
 export function NodeConfigPanel({ designId }: { designId: string }) {
   const importRecord = useDesignStore((s) => s.importRecord);
@@ -25,12 +23,17 @@ export function NodeConfigPanel({ designId }: { designId: string }) {
   const phaseNotes = useDesignStore((s) => s.phaseNotes);
   const actionLog = useDesignStore((s) => s.actionLog);
   const selectedNodeIds = useDesignStore((s) => s.selectedNodeIds);
+  const selectedEdgeIds = useDesignStore((s) => s.selectedEdgeIds);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [importError, setImportError] = useState<string | null>(null);
 
   const selected =
     selectedNodeIds.length === 1
       ? graph.nodes.find((n) => n.id === selectedNodeIds[0])
+      : undefined;
+  const selectedEdge =
+    selectedNodeIds.length === 0 && selectedEdgeIds.length === 1
+      ? graph.edges.find((e) => e.id === selectedEdgeIds[0])
       : undefined;
 
   const onExport = () =>
@@ -96,6 +99,15 @@ export function NodeConfigPanel({ designId }: { designId: string }) {
         <p className="mt-2 text-xs text-neutral-500">
           Select a node to configure it.
         </p>
+      )}
+
+      {selectedEdge && (
+        <>
+          <h2 className="mt-6 text-xs font-semibold tracking-wide text-neutral-400 uppercase">
+            Edge
+          </h2>
+          <EdgeInspector edge={selectedEdge} />
+        </>
       )}
     </aside>
   );

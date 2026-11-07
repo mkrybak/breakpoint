@@ -99,6 +99,7 @@ app/
 │   │   ├── panels/RequirementsPanel.tsx  # NFR inputs: RPS, p95, consistency, error budget
 │   │   ├── panels/ScenarioPanel.tsx      # pick scenario, run/pause, chaos buttons
 │   │   ├── panels/chaos-actions.ts       # chaos list shared by ScenarioPanel and "Break it"
+│   │   ├── panels/EdgeInspector.tsx      # selected edge: timeouts, retries
 │   │   ├── hud/MetricsBar.tsx            # p95, error %, served RPS cards
 │   │   ├── hud/EventLog.tsx
 │   │   └── hud/Verdict.tsx
@@ -110,6 +111,7 @@ app/
 │   │   │   ├── types.ts          # SimNode, SimFrame, RunResult
 │   │   │   ├── engine.ts         # tick(state) => state — pure
 │   │   │   ├── node-models.ts    # per-kind capacity/latency/queue math
+│   │   │   ├── edge-state.ts     # per-edge timeouts/retries state (T-8.6: breaker)
 │   │   │   ├── rules.ts          # ramp/spike/kill/flush/partition appliers
 │   │   │   ├── verdict.ts        # NFR pass/fail evaluation
 │   │   │   ├── rng.ts            # seeded PRNG (mulberry32)

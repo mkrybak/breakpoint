@@ -1,4 +1,5 @@
 export type {
+  EdgeFrame,
   NodeFrame,
   NodeState,
   RunResult,

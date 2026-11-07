@@ -1,4 +1,5 @@
 export type {
+  EdgeFrame,
   NodeFrame,
   NodeState,
   RunResult,
@@ -12,6 +13,11 @@ export { mulberry32 } from "./rng";
 export type { Rng } from "./rng";
 export { createSimRun, simulate, TICKS_PER_SEC } from "./engine";
 export type { ApplyRulesFn, SimRun, TickEffects } from "./engine";
+export {
+  MAX_RETRIES,
+  MAX_TIMEOUT_MS,
+  edgeSupportsResilience,
+} from "./edge-state";
 export { compileRules, createRuleEngine } from "./rules";
 export type { RuleEngine } from "./rules";
 export { evaluateVerdict } from "./verdict";

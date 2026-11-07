@@ -29,6 +29,10 @@ export interface DesignEdge {
    * a job) or > 1 (3 queries per request). (T-8.3)
    */
   callsPerRequest?: number;
+  /** T-8.5, sync call edges only: ms the caller waits per attempt; absent = no timeout. */
+  timeoutMs?: number;
+  /** T-8.5, sync call edges only: extra attempts after a failure (0–5); absent = 0. */
+  retries?: number;
 }
 
 export interface DesignGraph {

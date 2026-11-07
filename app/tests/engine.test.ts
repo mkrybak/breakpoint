@@ -30,7 +30,12 @@ function node(
 function edge(
   source: string,
   target: string,
-  overrides: Partial<Pick<DesignEdge, "trafficShare" | "callsPerRequest" | "kind">> = {},
+  overrides: Partial<
+    Pick<
+      DesignEdge,
+      "trafficShare" | "callsPerRequest" | "kind" | "timeoutMs" | "retries"
+    >
+  > = {},
 ): DesignEdge {
   return { id: `e-${source}-${target}`, source, target, kind: "sync", ...overrides };
 }
@@ -805,5 +810,122 @@ describe("simulate — golden 5: determinism", () => {
     expect(JSON.stringify(a)).toBe(JSON.stringify(b));
     const c = simulate(g, { ...sc, seed: 8 }, jitter);
     expect(JSON.stringify(c)).not.toBe(JSON.stringify(a));
+  });
+});
+
+describe("simulate — timeouts and retries (T-8.5)", () => {
+  it("a drop is retried next tick; only the last attempt's failure is an error", () => {
+    const sc = scenario({ durationSec: 0.3, baseRps: 8000, readRatio: 1 });
+    const g = graph(
+      [node("c", "client"), node("dep")],
+      [edge("c", "dep", { retries: 1 })],
+    );
+    const frames = simulate(g, sc);
+    const e = frames.map((f) => f.perEdge["e-c-dep"]);
+    expect(e.map((x) => x.rps)).toEqual([8000, 10000, 12800]);
+    expect(e.map((x) => x.retryRps)).toEqual([0, 2000, 4800]);
+    expect(e.map((x) => x.failRate)).toEqual([0.25, 0.6, 0.6875]);
+    const dep = frames.map((f) => f.perNode["dep"]);
+    expect(dep.map((n) => n.dropped)).toEqual([2000, 6000, 8800]);
+    expect(dep.map((n) => n.util)).toEqual([2, 3, 3.7]);
+    expect(frames.map((f) => f.errorRate)).toEqual([0, 0.15, 0.4125]);
+    expect(frames.map((f) => f.servedRps)).toEqual([8000, 6800, 4700]);
+
+    const noRetries = graph(
+      [node("c", "client"), node("dep")],
+      [edge("c", "dep")],
+    );
+    expect(simulate(noRetries, sc).map((f) => f.errorRate)).toEqual([
+      0.25, 0.5, 0.5,
+    ]);
+  });
+
+  it("a timeout fails the slow tail and caps the caller's wait", () => {
+    const g = graph(
+      [node("c", "client"), node("dep")],
+      [edge("c", "dep", { timeoutMs: 100 })],
+    );
+    const [frame] = simulate(g, scenario({ durationSec: 0.1, baseRps: 2000 }));
+    expect(frame.errorRate).toBeCloseTo(Math.exp(-100 / 16), 12);
+    expect(frame.p95Ms).toBe(1.6 * (1 + 16 * (1 - Math.exp(-100 / 16))));
+    expect(frame.perEdge["e-c-dep"]).toEqual({
+      rps: 2000,
+      retryRps: 0,
+      failRate: Math.exp(-100 / 16),
+    });
+  });
+
+  it("edges without timeoutMs/retries carry no new frame fields", () => {
+    const g = graph([node("c", "client"), node("app")], [edge("c", "app")]);
+    const frames = simulate(g, scenario({ durationSec: 0.4, baseRps: 5000 }));
+    expect(Object.keys(frames[0].perEdge["e-c-app"])).toEqual(["rps"]);
+  });
+
+  it("a partitioned retry edge books everything unroutable and resets", () => {
+    const g = graph(
+      [node("c", "client"), node("dep")],
+      [edge("c", "dep", { retries: 2 })],
+    );
+    const cut: ApplyRulesFn = (t, s) => ({
+      offeredRps: s.baseRps,
+      ...(t === 1 ? { deadEdges: ["e-c-dep"] } : {}),
+    });
+    const frames = simulate(
+      g,
+      scenario({ durationSec: 0.3, baseRps: 8000 }),
+      cut,
+    );
+    expect(frames[1].errorRate).toBe(1);
+    expect(frames[1].perEdge["e-c-dep"].failRate).toBe(1);
+    expect(frames[2].perEdge["e-c-dep"].retryRps).toBe(0);
+  });
+});
+
+describe("simulate — golden: retry storm (T-8.5)", () => {
+  const storm = (policy: Partial<Pick<DesignEdge, "timeoutMs" | "retries">>) =>
+    graph(
+      [
+        node("c", "client"),
+        node("app", "app_server", { replicas: 4 }),
+        node("dep"),
+      ],
+      [edge("c", "app"), edge("app", "dep", { timeoutMs: 200, ...policy })],
+    );
+  const spike: ApplyRulesFn = (t, s) => ({
+    offeredRps: t >= 10 && t < 20 ? s.baseRps * 2 : s.baseRps,
+  });
+  const sc = scenario({ durationSec: 6, baseRps: 3000, readRatio: 1 });
+
+  it("retries ×3 amplify a 1 s spike into a dependency that stays overloaded", () => {
+    const frames = simulate(storm({ retries: 3 }), sc, spike);
+    expect(frames).toHaveLength(60);
+    for (const f of frames.slice(0, 10)) {
+      expect(f.perNode["dep"].state).toBe("hot");
+      expect(f.errorRate).toBeLessThan(0.01);
+    }
+    for (const f of frames.slice(30)) {
+      expect(f.perNode["dep"].state).toBe("overloaded");
+      expect(f.perEdge["e-app-dep"].rps).toBeGreaterThan(2 * 3000);
+      expect(f.perEdge["e-app-dep"].retryRps).toBeGreaterThan(3000);
+      expect(f.errorRate).toBeGreaterThan(0.5);
+    }
+  });
+
+  it("without retries the dependency recovers after the spike", () => {
+    const frames = simulate(storm({}), sc, spike);
+    for (const f of frames.slice(25)) {
+      expect(f.perNode["dep"].state).toBe("hot");
+      expect(f.perEdge["e-app-dep"].rps).toBe(3000);
+      expect(f.perEdge["e-app-dep"].retryRps).toBe(0);
+      expect(f.errorRate).toBeLessThan(0.01);
+    }
+  });
+
+  it("control: retries ×3 under steady load never overload", () => {
+    const frames = simulate(storm({ retries: 3 }), sc);
+    for (const f of frames) {
+      expect(f.perNode["dep"].state).not.toBe("overloaded");
+      expect(f.errorRate).toBeLessThan(0.01);
+    }
   });
 });

@@ -259,12 +259,29 @@ function parseEdge(
   kindById: Map<string, ComponentKind>,
 ): DesignEdge | null {
   if (!isRecord(value)) return null;
-  const { id, source, target, kind, trafficShare, autoShare, callsPerRequest } = value;
+  const {
+    id,
+    source,
+    target,
+    kind,
+    trafficShare,
+    autoShare,
+    callsPerRequest,
+    timeoutMs,
+    retries,
+  } = value;
   if (typeof id !== "string" || typeof source !== "string" || typeof target !== "string") return null;
   if (kind !== "sync" && kind !== "async") return null;
   if (trafficShare !== undefined && !isFiniteNumber(trafficShare)) return null;
   if (callsPerRequest !== undefined && !isFiniteNumber(callsPerRequest)) return null;
   if (autoShare !== undefined && typeof autoShare !== "boolean") return null;
+  if (timeoutMs !== undefined && !isFiniteNumber(timeoutMs)) return null;
+  if (retries !== undefined && !isFiniteNumber(retries)) return null;
+  // T-8.5: range sanitizing is the engine's job; kept but ignored on async edges
+  const resilience = {
+    ...(timeoutMs !== undefined ? { timeoutMs } : {}),
+    ...(retries !== undefined ? { retries } : {}),
+  };
   // TS doesn't narrow `unknown` through the negated literal check above
   const base = { id, source, target, kind: kind as DesignEdge["kind"] };
   if (isSplitSource(kindById.get(source))) {
@@ -272,10 +289,15 @@ function parseEdge(
       ...base,
       ...(trafficShare !== undefined ? { trafficShare } : {}),
       ...(autoShare !== undefined ? { autoShare } : {}),
+      ...resilience,
     };
   }
   const calls = callsPerRequest ?? trafficShare;
-  return { ...base, ...(calls !== undefined ? { callsPerRequest: calls } : {}) };
+  return {
+    ...base,
+    ...(calls !== undefined ? { callsPerRequest: calls } : {}),
+    ...resilience,
+  };
 }
 
 /** kind is only checked to be a string — the ActionKind union is M4's concern. */

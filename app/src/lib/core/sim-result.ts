@@ -15,11 +15,21 @@ export interface NodeFrame {
   lagSec?: number;
 }
 
+/** One edge's metrics for one tick. */
+export interface EdgeFrame {
+  /** attempts carried this tick: fresh calls + retries */
+  rps: number;
+  /** T-8.5, edges with timeoutMs/retries only: retries re-offered this tick (included in rps) */
+  retryRps?: number;
+  /** T-8.5, same edges only: share of this tick's attempts that failed (shed by the target or timed out) */
+  failRate?: number;
+}
+
 /** One per tick (100ms), streamed worker → UI. */
 export interface SimFrame {
   t: number;
   perNode: Record<string, NodeFrame>;
-  perEdge: Record<string, { rps: number }>;
+  perEdge: Record<string, EdgeFrame>;
   p95Ms: number;
   /** client-path drops / offered (0–1); async losses are in asyncDroppedRps */
   errorRate: number;

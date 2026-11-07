@@ -236,4 +236,55 @@ describe("flow-adapter", () => {
     // absent-vs-present autoShare survives the round-trip exactly
     expect(fromFlow(nodes, edges, "")).toEqual(graph);
   });
+
+  it("timeoutMs/retries survive a round-trip and stay absent when absent (T-8.5)", () => {
+    const graph: DesignGraph = {
+      nodes: [
+        {
+          id: "a",
+          kind: "app_server",
+          label: "App",
+          position: { x: 0, y: 0 },
+          config: {},
+        },
+        {
+          id: "b",
+          kind: "app_server",
+          label: "Dep",
+          position: { x: 100, y: 0 },
+          config: {},
+        },
+        {
+          id: "c",
+          kind: "db_sql",
+          label: "DB",
+          position: { x: 200, y: 0 },
+          config: {},
+        },
+      ],
+      edges: [
+        {
+          id: "e1",
+          source: "a",
+          target: "b",
+          kind: "sync",
+          callsPerRequest: 1,
+          timeoutMs: 200,
+          retries: 3,
+        },
+        {
+          id: "e2",
+          source: "b",
+          target: "c",
+          kind: "sync",
+          callsPerRequest: 1,
+        },
+      ],
+      entryNodeId: "a",
+    };
+    const { nodes, edges } = toFlow(graph, []);
+    expect(fromFlow(nodes, edges, graph.entryNodeId).edges).toStrictEqual(
+      graph.edges,
+    );
+  });
 });

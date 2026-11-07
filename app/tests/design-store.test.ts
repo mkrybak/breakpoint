@@ -202,6 +202,21 @@ describe("design-store", () => {
     });
   });
 
+  it("updateEdge sets timeoutMs/retries; undefined removes the key (T-8.5)", () => {
+    const find = () =>
+      useDesignStore.getState().graph.edges.find((e) => e.id === "e-client-lb");
+    useDesignStore
+      .getState()
+      .updateEdge("e-client-lb", { timeoutMs: 200, retries: 3 });
+    expect(find()).toMatchObject({ timeoutMs: 200, retries: 3 });
+    useDesignStore
+      .getState()
+      .updateEdge("e-client-lb", { timeoutMs: undefined });
+    const edge = find();
+    expect(edge && "timeoutMs" in edge).toBe(false);
+    expect(edge?.retries).toBe(3);
+  });
+
   it("tracks edge selection", () => {
     useDesignStore
       .getState()

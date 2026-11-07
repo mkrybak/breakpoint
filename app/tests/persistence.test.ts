@@ -464,6 +464,63 @@ describe("edge migration (T-8.3)", () => {
     expect(parseDesignRecord(JSON.stringify({ id: "d1", name: "Bad", graph }))).toBeNull();
   });
 
+  it("timeoutMs/retries round-trip on call and lb edges (T-8.5)", () => {
+    const graph = legacyGraph();
+    graph.edges = [
+      {
+        id: "c-lb",
+        source: "c",
+        target: "lb",
+        callsPerRequest: 1,
+        timeoutMs: 200,
+        retries: 3,
+        kind: "sync",
+      },
+      {
+        id: "lb-a",
+        source: "lb",
+        target: "a",
+        trafficShare: 1,
+        timeoutMs: 200,
+        retries: 3,
+        kind: "sync",
+      },
+    ];
+    const record = parseDesignRecord(
+      JSON.stringify({ id: "d1", name: "Resilient", graph }),
+    );
+    expect(record?.graph.edges).toStrictEqual([
+      {
+        id: "c-lb",
+        source: "c",
+        target: "lb",
+        kind: "sync",
+        callsPerRequest: 1,
+        timeoutMs: 200,
+        retries: 3,
+      },
+      {
+        id: "lb-a",
+        source: "lb",
+        target: "a",
+        kind: "sync",
+        trafficShare: 1,
+        timeoutMs: 200,
+        retries: 3,
+      },
+    ]);
+  });
+
+  it("rejects a non-numeric retries (T-8.5)", () => {
+    const graph = legacyGraph();
+    graph.edges = [
+      { id: "c-lb", source: "c", target: "lb", retries: "3", kind: "sync" },
+    ];
+    expect(
+      parseDesignRecord(JSON.stringify({ id: "d1", name: "Bad", graph })),
+    ).toBeNull();
+  });
+
   it("loadDesign migrates on read without rewriting the stored record", () => {
     localStorage.setItem(designStorageKey("legacy"), legacyRecordJson("legacy"));
     expect(loadDesign("legacy")?.graph.edges).toStrictEqual(migratedEdges);

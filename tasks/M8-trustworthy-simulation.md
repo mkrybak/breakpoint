@@ -43,7 +43,8 @@ Every task updates [[03-simulation-engine]] (spec + Decisions) and adds or adjus
 **Accept:** A node's client-path latency = own latency + the **sum** of its sync calls' latencies, weighted by `callsPerRequest`. Today it's a traffic-weighted *average*, which is right only for LB splits, and LB edges keep the average. Golden test: an app calling a cache and then a DB sequentially pays both.
 
 ### T-8.5 — Timeouts and retries
-- [ ] T-8.5 done
+- [x] T-8.5 done
+  - Also touched core/sim-result (`EdgeFrame`), new `simulation/edge-state.ts`, persistence/flow-adapter/design-store, `panels/{EdgeInspector,styles}.tsx`, examples `retry-storm.json` + `dependency-blip.json`; the plan's node-models drop expectation was off (2000 not 4000), test fixed to match golden 1.
 
 **Files:** `src/lib/core/design.ts`, `src/lib/simulation/engine.ts`, `src/lib/simulation/node-models.ts`, `src/components/panels/` edge inspector
 **Accept:** Sync edges get optional `timeoutMs` and `retries`. Requests that drop or exceed the timeout at the target count as failed, and each retry re-offers load to the target next tick. Golden test, retry storm: a dependency briefly saturates, retries ×3 amplify the load, and it stays overloaded after the trigger ends. Without retries it recovers.
@@ -76,3 +77,5 @@ Every task updates [[03-simulation-engine]] (spec + Decisions) and adds or adjus
 - 2026-11-06 (T-8.3, lead call): legacy edges migrate on read via `parseDesignGraph`, with unknown edge keys dropped. Practice's mount-time phase-notes autosave then rewrites the record in the new shape; that's harmless.
 - T-8.4: call-edge math was already a sum once T-8.3 multiplies by callsPerRequest; the code change is LB splits normalizing over live split flow (partitioned backend no longer flatters p95) + the clientPathTerms/meanPathMs seam for T-8.7.
 - 2026-11-06 (T-8.4, lead call): an LB split averages over its *live* backends (denominator = live split flow, not served(lb)), so a partitioned backend no longer halves p95 (11.77 → 20.30 ms); calls are sequential (no parallel fan-out max).
+- T-8.5: timeout = exponential tail fraction exp(−t/pathMs(target)); tail-drop attribution; only exhausted attempts are errors; edge fields live in the right panel's Edge section (not the canvas popover); files beyond the list: core/sim-result, edge-state.ts (new), persistence, flow-adapter, design-store, panels/styles.ts, examples retry-storm + dependency-blip.
+- 2026-11-06 (T-8.5, lead call): timeout failure is the exponential tail fraction exp(−t/pathMs) rather than an all-or-nothing cliff; timed-out work still loads the target; only exhausted attempts count as client errors; retries go to the same backend next tick, no backoff.

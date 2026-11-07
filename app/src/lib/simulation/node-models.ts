@@ -116,6 +116,8 @@ export interface NodeModelOutput {
   queued: Flow;
   /** RPS shed this tick — load beyond capacity and the queue cap */
   dropped: number;
+  /** share of this tick's arrivals shed: min(1, dropped / arrivals), 0 with no arrivals. Tail-drop: a full queue rejects new arrivals first (T-8.5). */
+  rejectFraction: number;
   /** demand / effectiveCapacity; max of the two ratios when split; 0 when unlimited */
   util: number;
   /** mean ms a request spends at this node: M/M/1 service time + queue wait */
@@ -146,6 +148,23 @@ function splitByFlow(flow: Flow, flowTotal: number, total: number): Flow {
 
 /** M/M/1 service time blows up at util → 1; the spec caps the term at 0.95. */
 const MAX_MM1_UTIL = 0.95;
+
+/**
+ * Share of calls slower than `timeoutMs` when the callee's mean path latency
+ * is `meanMs`. M/M/1 time-in-system is exponential: P(T > t) = exp(−t/mean).
+ */
+export function timeoutFraction(meanMs: number, timeoutMs: number): number {
+  return meanMs > 0 ? Math.exp(-timeoutMs / meanMs) : 0;
+}
+
+/** Mean time a caller waits per attempt through a timeout: E[min(T, t)] = mean × (1 − exp(−t/mean)). */
+export function callLatencyMs(
+  meanMs: number,
+  timeoutMs: number | undefined,
+): number {
+  if (timeoutMs === undefined || meanMs <= 0) return meanMs;
+  return meanMs * (1 - Math.exp(-timeoutMs / meanMs));
+}
 
 /**
  * The spec's tick-loop step 3 plus the per-node half of step 4 — latency —
@@ -187,11 +206,14 @@ export function makeModel(capacity: CapacityFn): NodeModel {
     const queuedTotal = Math.min(overflowTotal, maxQueue);
     // queuedTotal > 0 implies a finite positive totalCap (else maxQueue is 0)
     const queueWaitMs = queuedTotal > 0 ? (queuedTotal / totalCap) * 1000 : 0;
+    const dropped = overflowTotal - queuedTotal;
+    const arrivals = flowRps(inflow);
 
     return {
       served,
       queued: splitByFlow(overflow, overflowTotal, queuedTotal),
-      dropped: overflowTotal - queuedTotal,
+      dropped,
+      rejectFraction: arrivals > 0 ? Math.min(1, dropped / arrivals) : 0,
       util,
       latencyMs:
         def.latency.baseMs / (1 - Math.min(util, MAX_MM1_UTIL)) + queueWaitMs,
@@ -235,10 +257,13 @@ export function makeBufferModel(capacity: CapacityFn): NodeModel {
     const queuedTotal = Math.min(overflowTotal, retention);
     const ingestUtil = ratio(flowRps(inflow), ownCap);
     const util = Math.max(ingestUtil, ratio(overflowTotal, retention));
+    const dropped = overflowTotal - queuedTotal;
+    const arrivals = flowRps(inflow);
     return {
       served,
       queued: splitByFlow(overflow, overflowTotal, queuedTotal),
-      dropped: overflowTotal - queuedTotal,
+      dropped,
+      rejectFraction: arrivals > 0 ? Math.min(1, dropped / arrivals) : 0,
       util,
       latencyMs: def.latency.baseMs / (1 - Math.min(ingestUtil, MAX_MM1_UTIL)),
       state: nodeState(util, ownCap),

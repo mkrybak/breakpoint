@@ -17,6 +17,10 @@ export type FlowEdgeData = {
   autoShare?: boolean;
   /** T-8.3, call edges (every non-lb source) only; absent reads as 1. */
   callsPerRequest?: number;
+  /** T-8.5, sync call edges: ms the caller waits per attempt; absent = no timeout. */
+  timeoutMs?: number;
+  /** T-8.5, sync call edges: extra attempts after a failure; absent = 0. */
+  retries?: number;
   /** Source node's kind — sourceKind lets FlowEdge pick split vs call without a store lookup. */
   sourceKind?: ComponentKind;
 };
@@ -61,6 +65,8 @@ export function toFlow(
         trafficShare: e.trafficShare,
         autoShare: e.autoShare,
         callsPerRequest: e.callsPerRequest,
+        timeoutMs: e.timeoutMs,
+        retries: e.retries,
         sourceKind: kindById.get(e.source),
       },
     })),
@@ -97,6 +103,10 @@ export function fromFlow(
         ...(e.data?.callsPerRequest !== undefined
           ? { callsPerRequest: e.data.callsPerRequest }
           : {}),
+        ...(e.data?.timeoutMs !== undefined
+          ? { timeoutMs: e.data.timeoutMs }
+          : {}),
+        ...(e.data?.retries !== undefined ? { retries: e.data.retries } : {}),
       })),
     entryNodeId: resolveEntryNodeId(nodes, previousEntryNodeId),
   };

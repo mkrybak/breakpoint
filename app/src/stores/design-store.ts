@@ -76,12 +76,21 @@ interface DesignStore {
    * autoShare (T-6.1) on split (lb) edges, or callsPerRequest on call edges
    * (T-8.3). LB-source edges rebalance after the patch, so an auto edge's
    * trafficShare is always store-computed — to pin a share, pass
-   * autoShare: false alongside it.
+   * autoShare: false alongside it. Timeouts/retries (T-8.5): `undefined`
+   * for timeoutMs/retries removes the key.
    */
   updateEdge: (
     id: string,
     patch: Partial<
-      Pick<DesignEdge, "trafficShare" | "autoShare" | "callsPerRequest" | "kind">
+      Pick<
+        DesignEdge,
+        | "trafficShare"
+        | "autoShare"
+        | "callsPerRequest"
+        | "kind"
+        | "timeoutMs"
+        | "retries"
+      >
     >,
   ) => void;
   /** Config panel (T-1.5): set one config key on a node. */
@@ -164,6 +173,20 @@ function withoutRecording(mutate: () => void): void {
   } finally {
     recordingSuspended = false;
   }
+}
+
+const CLEARABLE_EDGE_KEYS = ["timeoutMs", "retries"] as const;
+
+/** Merge an updateEdge patch; an explicit undefined on a clearable key removes it (T-8.5). */
+function applyEdgePatch(
+  edge: DesignEdge,
+  patch: Parameters<DesignStore["updateEdge"]>[1],
+): DesignEdge {
+  const next: DesignEdge = { ...edge, ...patch };
+  for (const key of CLEARABLE_EDGE_KEYS) {
+    if (key in patch && patch[key] === undefined) delete next[key];
+  }
+  return next;
 }
 
 export const useDesignStore = create<DesignStore>((set) => ({
@@ -282,7 +305,7 @@ export const useDesignStore = create<DesignStore>((set) => ({
       const graph = {
         ...s.graph,
         edges: s.graph.edges.map((e) =>
-          e.id === id ? { ...e, ...patch } : e,
+          e.id === id ? applyEdgePatch(e, patch) : e,
         ),
       };
       return { graph: rebalanceLb(graph, target.source) };
