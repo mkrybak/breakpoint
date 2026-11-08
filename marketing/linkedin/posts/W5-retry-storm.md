@@ -2,7 +2,7 @@
 tags: [marketing, linkedin, post]
 status: draft   # ready once the payments line is decided
 week: W5
-publish: 2026-12-15
+publish: 2026-12-10
 target: "20–50 reactions"
 ---
 

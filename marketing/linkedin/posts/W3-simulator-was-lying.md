@@ -2,7 +2,7 @@
 tags: [marketing, linkedin, post]
 status: ready
 week: W3
-publish: 2026-12-01
+publish: 2026-11-26
 target: "30–80 reactions (best breakout candidate)"
 ---
 

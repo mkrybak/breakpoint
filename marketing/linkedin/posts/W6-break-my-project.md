@@ -2,7 +2,7 @@
 tags: [marketing, linkedin, post]
 status: idea   # finish after W5, it needs real numbers from the series
 week: W6
-publish: 2027-01-05
+publish: 2027-01-07
 target: "10+ people try it and reply"
 ---
 

@@ -9,7 +9,7 @@ Built from [[01-research]] (what works) and [[02-audience]] (what's realistic fo
 
 ## Rules
 
-1. **One post a week, Tuesday ~7–8am PT.** Catches Vancouver's morning and Ukraine's evening.
+1. **One post a week, Thursday ~7–8am PT.** Catches Vancouver's morning and Ukraine's evening. Avoid BC statutory holidays (e.g. Remembrance Day, Nov 11).
 2. **Struggle and bugs before announcements.** Peers' complaint posts beat their launch posts.
 3. **Every post gets a visual.** GIF or screenshot from the app.
 4. **Plain English, short sentences.** Many readers aren't native speakers.

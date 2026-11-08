@@ -2,7 +2,7 @@
 tags: [marketing, linkedin, post]
 status: ready
 week: W2
-publish: 2026-11-24
+publish: 2026-11-19
 target: "10+ comments"
 ---
 

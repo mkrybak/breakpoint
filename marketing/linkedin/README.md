@@ -20,15 +20,15 @@ A 6-week build-in-public series about [BreakMyDesign](https://breakmydesign.com/
 
 ## Schedule
 
-Weekly, Tuesday morning Pacific (Ukraine is +10h, so ~7–8am PT also catches their evening).
+Weekly, Thursday morning Pacific (Ukraine is +10h, so ~7–8am PT also catches their evening).
 
-- [ ] [[W0-warmup|W0 — Warm-up]] · Nov 9–15
-- [ ] [[W1-launch|W1 — Launch]] · Tue Nov 17
-- [ ] [[W2-puzzle|W2 — Puzzle: what breaks first?]] · Tue Nov 24
-- [ ] [[W3-simulator-was-lying|W3 — My simulator was lying to me]] · Tue Dec 1
-- [ ] [[W4-joke|W4 — Joke]] · Tue Dec 8
-- [ ] [[W5-retry-storm|W5 — Retry storm]] · Tue Dec 15
-- [ ] [[W6-break-my-project|W6 — Break my side project]] · Tue Jan 5 (skips holiday weeks)
+- [ ] [[W0-warmup|W0 — Warm-up]] · Mon–Wed Nov 9–11 (short warm-up)
+- [ ] [[W1-launch|W1 — Launch]] · Thu Nov 12
+- [ ] [[W2-puzzle|W2 — Puzzle: what breaks first?]] · Thu Nov 19
+- [ ] [[W3-simulator-was-lying|W3 — My simulator was lying to me]] · Thu Nov 26 (US Thanksgiving; ~1% of my followers are in the US)
+- [ ] [[W4-joke|W4 — Joke]] · Thu Dec 3
+- [ ] [[W5-retry-storm|W5 — Retry storm]] · Thu Dec 10
+- [ ] [[W6-break-my-project|W6 — Break my side project]] · Thu Jan 7 (skips holiday weeks)
 
 Optional, slot in when ready: [[optional-ai-workflow]], [[optional-ukrainian-puzzle]].
 
@@ -56,4 +56,5 @@ Optional, slot in when ready: [[optional-ai-workflow]], [[optional-ukrainian-puz
 - 2026-11-08: Carousel/list post cut, AI-workflow post optional: both underperform at my account size (see [[02-audience]]).
 - 2026-11-08: Product name is BreakMyDesign (renamed today); link goes in the first comment, never in the post body.
 - 2026-11-08: Every number in a post is checked against a sim run (`assets/sims/out-*.txt`). Two draft claims changed: W3 drops "660 ms" (it came from a different design); the real story is that before the fix the queue design scored exactly like having no queue. W5 now says the breaker makes the design *recover*, not pass (the app still marks it Failed).
+- 2026-11-08: Schedule moved to **Thursdays**, starting W1 on Thu Nov 12 (I wanted to post within a few days). Warm-up shortened to Mon–Wed, friend DMs first. Wed Nov 11 avoided (Remembrance Day, BC statutory holiday; 26% of followers in Vancouver). W3 lands on US Thanksgiving, kept since ~1% of followers are in the US.
 - 2026-11-08: Footage uses the built-in "3× traffic spike" scenario on the live site so readers can reproduce it; the custom W2 scenario is shown as a chart, not a UI recording.
