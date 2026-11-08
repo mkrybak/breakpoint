@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>W1 Post Preview</title>
+<style>
+  :root {
+    --bg: #f4f2ee; --card: #ffffff; --text: #1d1d1d; --muted: #666666; --line: #e8e6e1;
+    --link: #0a66c2; --hl: #fff3bf; --hl-text: #5c4400; --ok: #1a7f37; --warn: #9a6700; --panel: #ffffff;
+    --chip: #eef3f8;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #000000; --card: #1b1f23; --text: #e9e9e9; --muted: #a0a0a0; --line: #2f3439;
+      --link: #71b7fb; --hl: #4a3b00; --hl-text: #ffe28a; --ok: #3fb950; --warn: #d29922; --panel: #1b1f23;
+      --chip: #263038;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #000000; --card: #1b1f23; --text: #e9e9e9; --muted: #a0a0a0; --line: #2f3439;
+    --link: #71b7fb; --hl: #4a3b00; --hl-text: #ffe28a; --ok: #3fb950; --warn: #d29922; --panel: #1b1f23;
+    --chip: #263038;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+    font: 14px/1.42 -apple-system, system-ui, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+  .bar { position: sticky; top: 0; z-index: 2; display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+    padding: 10px 16px; background: var(--card); border-bottom: 1px solid var(--line); }
+  .bar h1 { font-size: 15px; margin: 0 12px 0 0; }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; overflow: hidden; }
+  .seg button { border: 0; background: transparent; color: var(--text); padding: 6px 12px; font: inherit; cursor: pointer; }
+  .seg button[aria-pressed="true"] { background: var(--chip); font-weight: 600; }
+  label.tog { display: inline-flex; gap: 6px; align-items: center; cursor: pointer; padding: 6px 4px; }
+  .wrap { display: flex; gap: 24px; justify-content: center; align-items: flex-start; padding: 24px 16px 60px; flex-wrap: wrap; }
+  .feed { width: 555px; max-width: 100%; transition: width .2s; }
+  .feed.mobile { width: 375px; }
+  .card { background: var(--card); border-radius: 8px; box-shadow: 0 0 0 1px var(--line); overflow: hidden; }
+  .head { display: flex; gap: 8px; padding: 12px 16px 0; }
+  .avatar { flex: none; width: 48px; height: 48px; border-radius: 50%; display: grid; place-items: center;
+    background: linear-gradient(135deg, #5b8def, #2b4c9b); color: #fff; font-weight: 700; }
+  .who { min-width: 0; }
+  .name { font-weight: 600; font-size: 14px; }
+  .name span { color: var(--muted); font-weight: 400; }
+  .headline, .time { color: var(--muted); font-size: 12px; }
+  .headline { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .time { display: flex; gap: 4px; align-items: center; }
+  .body { padding: 8px 16px 8px; position: relative; }
+  .text { white-space: pre-wrap; word-wrap: break-word; }
+  .text.clamped { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+  .more { position: absolute; right: 16px; bottom: 8px; background: var(--card); border: 0; color: var(--muted);
+    font: inherit; cursor: pointer; padding: 0 0 0 24px;
+    background: linear-gradient(90deg, transparent, var(--card) 22px); }
+  .more:hover { color: var(--link); text-decoration: underline; }
+  .ph { background: var(--hl); color: var(--hl-text); border-radius: 3px; padding: 0 2px; }
+  video { display: block; width: 100%; background: #0b0b0c; }
+  .social { display: flex; justify-content: space-between; color: var(--muted); font-size: 12px; padding: 8px 16px;
+    border-bottom: 1px solid var(--line); }
+  .actions { display: flex; justify-content: space-around; padding: 4px 8px; }
+  .actions div { display: flex; gap: 6px; align-items: center; color: var(--muted); font-weight: 600; padding: 10px 8px; }
+  .comments { padding: 4px 16px 16px; }
+  .cm { display: flex; gap: 8px; margin-top: 10px; }
+  .cm .avatar { width: 32px; height: 32px; font-size: 12px; }
+  .bubble { background: var(--chip); border-radius: 0 8px 8px 8px; padding: 8px 12px; flex: 1; min-width: 0; }
+  .bubble .name { font-size: 13px; }
+  .bubble .author { font-size: 11px; border: 1px solid var(--muted); color: var(--muted); border-radius: 3px; padding: 0 4px; margin-left: 4px; font-weight: 400; }
+  .bubble p { margin: 4px 0 0; white-space: pre-wrap; }
+  a { color: var(--link); text-decoration: none; font-weight: 600; }
+  .panel { width: 320px; max-width: 100%; background: var(--panel); border-radius: 8px; box-shadow: 0 0 0 1px var(--line); padding: 16px; }
+  .panel h2 { font-size: 14px; margin: 0 0 10px; }
+  .panel ul { list-style: none; padding: 0; margin: 0 0 14px; }
+  .panel li { display: flex; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--line); font-size: 13px; }
+  .panel li:last-child { border-bottom: 0; }
+  .ok::before { content: "✓"; color: var(--ok); font-weight: 700; }
+  .warn::before { content: "!"; color: var(--warn); font-weight: 700; width: 9px; text-align: center; }
+  .panel .fold { background: var(--chip); border-radius: 6px; padding: 10px; font-size: 13px; white-space: pre-wrap; }
+  .panel small { color: var(--muted); display: block; margin-top: 6px; }
+  svg { flex: none; }
+</style>
+</head>
+<body>
+<div class="bar">
+  <h1>W1 · Launch preview</h1>
+  <div class="seg" role="group" aria-label="Width">
+    <button id="bDesk" aria-pressed="true">Desktop</button><button id="bMob" aria-pressed="false">Phone</button>
+  </div>
+  <div class="seg" role="group" aria-label="Theme">
+    <button data-t="light" aria-pressed="false">Light</button><button data-t="dark" aria-pressed="false">Dark</button>
+  </div>
+  <label class="tog"><input type="checkbox" id="showPh" checked> Show "why" placeholder</label>
+</div>
+
+<div class="wrap">
+  <div class="feed" id="feed">
+    <article class="card">
+      <div class="head">
+        <div class="avatar" aria-hidden="true">MR</div>
+        <div class="who">
+          <div class="name">Mike Rybak <span>• You</span></div>
+          <div class="headline">Senior Software Engineer | Backend &amp; Distributed Systems | C#/.NET · Azure · Kubernetes · Stripe | Payments · POS · Fintech</div>
+          <div class="time">Now •
+            <svg width="14" height="14" viewBox="0 0 16 16" aria-label="Public"><circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor"/><path d="M1.5 8h13M8 1.5c2 2 2 11 0 13M8 1.5c-2 2-2 11 0 13" fill="none" stroke="currentColor"/></svg>
+          </div>
+        </div>
+      </div>
+
+      <div class="body">
+        <div class="text clamped" id="text"></div>
+        <button class="more" id="more">…more</button>
+      </div>
+
+      <video src="../assets/w1-launch.mp4" autoplay muted loop playsinline controls aria-label="BreakMyDesign: 3x traffic spike fails, add a replica, passes"></video>
+
+      <div class="social"><span>Be the first to react</span><span>1 comment</span></div>
+      <div class="actions" aria-hidden="true">
+        <div><svg width="20" height="20" viewBox="0 0 24 24"><path d="M7 11v9H4v-9h3Zm2 9h8.5a2 2 0 0 0 2-1.6l1.3-6A2 2 0 0 0 18.8 10H14l.8-4a2 2 0 0 0-3.6-1.5L9 9.5V20Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>Like</div>
+        <div><svg width="20" height="20" viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4V5Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>Comment</div>
+        <div><svg width="20" height="20" viewBox="0 0 24 24"><path d="M7 7h11l-3-3M17 17H6l3 3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>Repost</div>
+        <div><svg width="20" height="20" viewBox="0 0 24 24"><path d="m3 11 18-7-7 18-2-8-9-3Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>Send</div>
+      </div>
+
+      <div class="comments">
+        <div class="cm">
+          <div class="avatar" aria-hidden="true">MR</div>
+          <div class="bubble">
+            <div class="name">Mike Rybak <span class="author">Author</span></div>
+            <p>Try it here, no sign-up: <a href="https://breakmydesign.com/">breakmydesign.com</a>
+Start with "Quick simulation", then pick "3× traffic spike" under More scenarios.</p>
+          </div>
+        </div>
+      </div>
+    </article>
+  </div>
+
+  <aside class="panel">
+    <h2>Before you post</h2>
+    <ul id="checks"></ul>
+    <h2>What people see before "…more"</h2>
+    <div class="fold" id="fold"></div>
+    <small>The first ~3 lines decide whether anyone expands the post. The hook has to work on its own.</small>
+  </aside>
+</div>
+
+<script>
+  const WHY = "Why I built it: [1–2 sentences, your real reason].";
+  const LINES = [
+    "I've been quietly building something since July.",
+    "",
+    "It's called BreakMyDesign.",
+    "",
+    "You draw a system design, like in an interview. Press Run, and it sends traffic through it. Green holds. Red breaks.",
+    "",
+    "In the clip: one app server, then 3x traffic for ten seconds. It falls over. I add a second server, run it again, and it holds.",
+    "",
+    "@@WHY@@",
+    "",
+    "In a coding interview you can run your code. In system design you draw boxes and hope. I wanted a Run button for diagrams.",
+    "",
+    "It's a side project and still rough. Over the next few weeks I'll share what it taught me, including the times my own simulator was wrong.",
+    "",
+    "Link in the comments if you want to break something."
+  ];
+
+  const el = id => document.getElementById(id);
+  const text = el("text"), more = el("more");
+
+  function postLines(withPh) {
+    const out = [];
+    for (let i = 0; i < LINES.length; i++) {
+      if (LINES[i] === "@@WHY@@") { if (withPh) out.push(LINES[i]); else out.pop(); }
+      else out.push(LINES[i]);
+    }
+    return out;
+  }
+
+  function render() {
+    const withPh = el("showPh").checked;
+    const lines = postLines(withPh);
+    text.textContent = "";
+    lines.forEach((l, i) => {
+      if (l === "@@WHY@@") { const s = document.createElement("span"); s.className = "ph"; s.textContent = WHY; text.append(s); }
+      else text.append(l);
+      if (i < lines.length - 1) text.append("\n");
+    });
+    const plain = lines.map(l => l === "@@WHY@@" ? WHY : l).join("\n");
+    const checks = [
+      [!withPh, withPh ? 'Fill in or cut the "why" line' : '"Why" line resolved'],
+      [!/https?:\/\/|www\./.test(plain), "No link in the post body (it's in the first comment)"],
+      [!/#\w/.test(plain), "No hashtags"],
+      [!/—/.test(plain), "No em-dashes"],
+      [plain.length <= 1300, plain.length + " characters (well under the 3,000 limit)"],
+      [true, "Video attached: 19.5s, autoplays muted"],
+      [true, "First comment ready with the link"]
+    ];
+    el("checks").innerHTML = "";
+    for (const [ok, label] of checks) { const li = document.createElement("li"); li.className = ok ? "ok" : "warn"; li.textContent = label; el("checks").append(li); }
+    el("fold").textContent = lines.slice(0, 3).filter(Boolean).join("\n") + " …more";
+    text.classList.add("clamped"); more.hidden = false;
+  }
+
+  more.onclick = () => { text.classList.remove("clamped"); more.hidden = true; };
+  el("showPh").onchange = render;
+  el("bDesk").onclick = () => { el("feed").classList.remove("mobile"); el("bDesk").setAttribute("aria-pressed", "true"); el("bMob").setAttribute("aria-pressed", "false"); };
+  el("bMob").onclick = () => { el("feed").classList.add("mobile"); el("bMob").setAttribute("aria-pressed", "true"); el("bDesk").setAttribute("aria-pressed", "false"); };
+  document.querySelectorAll("[data-t]").forEach(b => b.onclick = () => {
+    document.documentElement.dataset.theme = b.dataset.t;
+    document.querySelectorAll("[data-t]").forEach(x => x.setAttribute("aria-pressed", String(x === b)));
+  });
+  render();
+</script>
+</body>
+</html>
