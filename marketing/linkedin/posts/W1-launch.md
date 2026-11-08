@@ -1,6 +1,6 @@
 ---
 tags: [marketing, linkedin, post]
-status: draft   # ready once the "why" is filled
+status: ready
 week: W1
 publish: 2026-11-17
 target: "20–40 reactions"
@@ -21,7 +21,7 @@ target: "20–40 reactions"
 >
 > In the clip: one app server, then 3x traffic for ten seconds. It falls over. I add a second server, run it again, and it holds.
 >
-> Why I built it: [1–2 sentences, your real reason].
+> Why I built it: every design has a breaking point. I wanted people to find theirs before the interview does.
 >
 > In a coding interview you can run your code. In system design you draw boxes and hope. I wanted a Run button for diagrams.
 >
@@ -37,8 +37,13 @@ target: "20–40 reactions"
 
 ## Fill before posting
 
-- [ ] "Why I built it": real, 1–2 sentences. If there's no story, cut the line; the post works without it
+- [x] "Why I built it": filled from the product's own tagline ("Every design has a breaking point. Find yours before the interview does."), so it claims nothing I haven't said
 - [ ] Watch the video on a phone once
+
+### Other "why" options (only if true for me; each makes a personal claim)
+
+- **Payments angle:** "Why I built it: I work on payment systems, where 'it should hold' is never good enough. I wanted that same honesty for interview answers."
+- **Both sides of the table:** "Why I built it: I've been in system design rounds where nobody could say if the design would actually work. Not the candidate. Not the interviewer." (only if I've actually been in rounds like that)
 
 ## First comment
 

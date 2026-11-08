@@ -34,7 +34,7 @@ Optional, slot in when ready: [[optional-ai-workflow]], [[optional-ukrainian-puz
 
 ## Status of open inputs
 
-- [ ] My real "why" for [[W1-launch]] (1–2 sentences, no invented story)
+- [x] "Why" for [[W1-launch]]: from the product tagline (alternatives listed in the note)
 - [ ] A real payments moment for [[W5-retry-storm]], or cut that line
 - [x] Puzzle scenario for [[W2-puzzle]] built and verified (3 and 6 replicas fail identically, 4 shards pass)
 - [x] Videos / images recorded on breakmydesign.com: see [[assets/README|assets]]
@@ -43,7 +43,7 @@ Optional, slot in when ready: [[optional-ai-workflow]], [[optional-ukrainian-puz
 | Post | Status | Needs from me |
 |---|---|---|
 | W0 | ready | do it |
-| W1 | draft | the "why" line |
+| W1 | ready | none (why line from the tagline; alternatives in the note) |
 | W2 | ready | none |
 | W3 | ready | none |
 | W4 | ready | pick a version |

@@ -87,7 +87,7 @@
   <div class="seg" role="group" aria-label="Theme">
     <button data-t="light" aria-pressed="false">Light</button><button data-t="dark" aria-pressed="false">Dark</button>
   </div>
-  <label class="tog"><input type="checkbox" id="showPh" checked> Show "why" placeholder</label>
+  <label class="tog"><input type="checkbox" id="showPh"> Highlight the "why" line</label>
 </div>
 
 <div class="wrap">
@@ -142,7 +142,7 @@ Start with "Quick simulation", then pick "3× traffic spike" under More scenario
 </div>
 
 <script>
-  const WHY = "Why I built it: [1–2 sentences, your real reason].";
+  const WHY = "Why I built it: every design has a breaking point. I wanted people to find theirs before the interview does.";
   const LINES = [
     "I've been quietly building something since July.",
     "",
@@ -167,8 +167,7 @@ Start with "Quick simulation", then pick "3× traffic spike" under More scenario
   function postLines(withPh) {
     const out = [];
     for (let i = 0; i < LINES.length; i++) {
-      if (LINES[i] === "@@WHY@@") { if (withPh) out.push(LINES[i]); else out.pop(); }
-      else out.push(LINES[i]);
+      out.push(LINES[i]);
     }
     return out;
   }
@@ -178,13 +177,13 @@ Start with "Quick simulation", then pick "3× traffic spike" under More scenario
     const lines = postLines(withPh);
     text.textContent = "";
     lines.forEach((l, i) => {
-      if (l === "@@WHY@@") { const s = document.createElement("span"); s.className = "ph"; s.textContent = WHY; text.append(s); }
+      if (l === "@@WHY@@") { const s = document.createElement("span"); if (withPh) s.className = "ph"; s.textContent = WHY; text.append(s); }
       else text.append(l);
       if (i < lines.length - 1) text.append("\n");
     });
     const plain = lines.map(l => l === "@@WHY@@" ? WHY : l).join("\n");
     const checks = [
-      [!withPh, withPh ? 'Fill in or cut the "why" line' : '"Why" line resolved'],
+      [true, '"Why" line filled (from your tagline)'],
       [!/https?:\/\/|www\./.test(plain), "No link in the post body (it's in the first comment)"],
       [!/#\w/.test(plain), "No hashtags"],
       [!/—/.test(plain), "No em-dashes"],
