@@ -102,7 +102,7 @@ export function ReviewScreen({ runId }: { runId: string }) {
         <div className="text-center">
           <h1 className="text-lg font-semibold">Review a run</h1>
           <p className="mt-1 max-w-md text-sm text-neutral-400">
-            Import a run bundle (<code>.breakpoint.json</code>) exported from an
+            Import a run bundle (<code>.breakmydesign.json</code>) exported from an
             interview to replay and grade it.
           </p>
         </div>

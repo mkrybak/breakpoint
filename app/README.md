@@ -1,4 +1,4 @@
-# Breakpoint
+# BreakMyDesign
 
 System design interview platform: draw an architecture on a canvas, run a live
 stress-test simulation against it, and grade the session against a rubric. Fully

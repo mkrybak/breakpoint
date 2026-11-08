@@ -1,12 +1,12 @@
 ---
-tags: [project, breakpoint]
+tags: [project, breakmydesign]
 status: active
 created: 2026-07-12
 ---
 
-# Breakpoint
+# BreakMyDesign
 
-*Every design has one. Find yours before the interview does.*
+*Every design has a breaking point. Find yours before the interview does.*
 
 A platform for running system design interviews the way they actually work (Hello Interview delivery framework): candidate builds a design on a canvas, interviewer sets non-functional requirements (e.g. 5k RPS, strong consistency, p95 < 500ms), and a **live stress-test simulation** shows in realtime what holds and what breaks.
 

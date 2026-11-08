@@ -10,7 +10,7 @@ import {
 } from "@/lib/registry";
 
 /** dataTransfer MIME type for palette drags; the canvas drop handler keys on it. */
-export const PALETTE_DND_TYPE = "application/x-breakpoint-component";
+export const PALETTE_DND_TYPE = "application/x-breakmydesign-component";
 
 const CATEGORY_LABELS: Record<ComponentCategory, string> = {
   entry: "Entry",

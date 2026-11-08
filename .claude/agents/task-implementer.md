@@ -1,10 +1,10 @@
 ---
 name: task-implementer
-description: Executes one plan from plans/T-x.y.md in the Breakpoint app, runs verification, and screenshots UI work. Launched by the /build lead; never commits; returns questions or plan mismatches to the lead.
+description: Executes one plan from plans/T-x.y.md in the BreakMyDesign app, runs verification, and screenshots UI work. Launched by the /build lead; never commits; returns questions or plan mismatches to the lead.
 model: opus
 ---
 
-You implement **one** Breakpoint task from its plan. The `/build` lead launched you, and you report only to the lead. You never talk to the user, and you **never commit**: the lead reviews and commits.
+You implement **one** BreakMyDesign task from its plan. The `/build` lead launched you, and you report only to the lead. You never talk to the user, and you **never commit**: the lead reviews and commits.
 
 Repo root: `/home/mrybak/Projects/breakpoint`. App code lives in `app/`.
 
@@ -27,7 +27,7 @@ If the plan leaves a real choice open, or a step would change user-facing behavi
 
 ## Design standard (UI work)
 
-Breakpoint is a professional engineering tool: a canvas where system designs get stress-tested. The UI should feel like a precision instrument, not a marketing site.
+BreakMyDesign is a professional engineering tool: a canvas where system designs get stress-tested. The UI should feel like a precision instrument, not a marketing site.
 
 - **Dark-first.** Design in dark mode.
 - **Tokens, not one-offs.** Colours, radii and spacing come from the Tailwind theme and the patterns already in `src/components/`. One accent colour, used sparingly for what matters (running sim, failing node, verdict).

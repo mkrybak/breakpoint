@@ -60,4 +60,4 @@ The decision includes dependency-budget entries. Throwaway prototype allowed.
 
 ## Decisions
 
-- 2026-11-05: Interview = live shared session (both parties in Breakpoint), not screen-share. Quick and Practice stay local-first.
+- 2026-11-05: Interview = live shared session (both parties in BreakMyDesign), not screen-share. Quick and Practice stay local-first.

@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Breakpoint",
+  title: "BreakMyDesign",
   description: "System design interview platform with a live stress test.",
 };
 

@@ -188,7 +188,7 @@ interface DesignRecord {       // localStorage key: bp:design:<id>
   updatedAt: string;           // ISO
 }
 
-interface RunBundle {          // the export file the grader imports: <name>.breakpoint.json
+interface RunBundle {          // the export file the grader imports: <name>.breakmydesign.json
   version: 1;
   design: DesignRecord;
   scenario: Scenario;          // frozen copy — replay works even if presets change

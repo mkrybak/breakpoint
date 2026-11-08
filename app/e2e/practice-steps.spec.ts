@@ -400,7 +400,7 @@ test("milestone demo: boards → earlier board in HLD → run → export bundle 
   await expect(page.getByRole("tab", { name: /^Entities/ })).toBeVisible();
   const bundleWait = page.waitForEvent("download");
   await page.getByRole("button", { name: "Export bundle" }).click();
-  const bundlePath = testInfo.outputPath("demo.breakpoint.json");
+  const bundlePath = testInfo.outputPath("demo.breakmydesign.json");
   await (await bundleWait).saveAs(bundlePath);
   expect(
     JSON.parse(readFileSync(bundlePath, "utf8")).design.boards.entities

@@ -1,6 +1,6 @@
 @AGENTS.md
 
-# Breakpoint — app
+# BreakMyDesign — app
 
 System design interview platform: canvas (React Flow) + live stress-test simulation + human grading. This folder is the Next.js app; the **specs live in the vault one level up** and are the source of truth.
 

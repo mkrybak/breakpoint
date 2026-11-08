@@ -65,7 +65,7 @@ export function ImportDropzone() {
           Drop a run bundle here, or click to choose
         </span>
         <span className="text-xs text-neutral-500">
-          A <code>.breakpoint.json</code> file exported from an interview
+          A <code>.breakmydesign.json</code> file exported from an interview
         </span>
         <input
           type="file"

@@ -344,7 +344,7 @@ function isValidActionEvent(value: unknown): value is ActionEvent {
 }
 
 /**
- * The export file the grader imports: <name>.breakpoint.json (02-data-model).
+ * The export file the grader imports: <name>.breakmydesign.json (02-data-model).
  * version stays 1: boards are additive (M13).
  */
 export interface RunBundle {
@@ -424,7 +424,7 @@ export function parseRunBundle(text: string): RunBundleParseResult {
   };
 }
 
-/** Triggers a browser download of the bundle as <slug>.breakpoint.json. */
+/** Triggers a browser download of the bundle as <slug>.breakmydesign.json. */
 export function exportRunBundleFile(bundle: RunBundle): void {
   const slug =
     bundle.design.name
@@ -437,7 +437,7 @@ export function exportRunBundleFile(bundle: RunBundle): void {
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = url;
-  anchor.download = `${slug}.breakpoint.json`;
+  anchor.download = `${slug}.breakmydesign.json`;
   anchor.click();
   URL.revokeObjectURL(url);
 }

@@ -16,7 +16,7 @@ Use this when you want to iterate on a UI by hand; `/build` handles UI tasks on 
 
 ## Design standard
 
-Breakpoint is a professional engineering tool — a canvas where system designs get stress-tested. The UI should feel like a precision instrument, not a marketing site.
+BreakMyDesign is a professional engineering tool — a canvas where system designs get stress-tested. The UI should feel like a precision instrument, not a marketing site.
 
 - **Dark-first.** Canvas-centric apps live in dark mode; design there, verify light mode works.
 - **Tokens, not one-offs.** Colors, radii, and spacing come from the Tailwind theme. No scattered hex values; one accent color, used sparingly for what matters (running sim, failing node, verdict).

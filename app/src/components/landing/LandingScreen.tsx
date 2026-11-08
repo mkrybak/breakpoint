@@ -100,7 +100,7 @@ export function LandingScreen() {
     <main className="flex flex-1 flex-col items-center bg-neutral-950 text-neutral-100">
       <div className="w-full max-w-3xl px-6 py-16">
         <header className="mb-8">
-          <h1 className="text-2xl font-semibold tracking-tight">Breakpoint</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">BreakMyDesign</h1>
           <p className="mt-1 text-sm text-neutral-400">
             Build a system and stress-test it live. Start with a quick
             simulation, or practice a full interview.
