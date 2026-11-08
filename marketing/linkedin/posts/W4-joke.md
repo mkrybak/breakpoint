@@ -2,7 +2,7 @@
 tags: [marketing, linkedin, post]
 status: ready
 week: W4
-publish: 2026-12-10
+publish: 2026-12-03
 target: "20–50 reactions, high comment rate"
 ---
 

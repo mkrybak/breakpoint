@@ -2,7 +2,7 @@
 tags: [marketing, linkedin, post]
 status: ready
 week: W1
-publish: 2026-11-19
+publish: 2026-11-12
 target: "20–40 reactions"
 ---
 
@@ -32,7 +32,7 @@ target: "20–40 reactions"
 
 **Above "…more":** "In a coding interview you can run your code. / In system design you draw boxes and hope. / So I built a Run button for diagrams…": the hook works on its own.
 
-**Facts behind the new lines:** 9 distinct commit days (Jul 12, 13, 14, 15, 19 and Nov 5, 6, 7, 8; `git log --format=%ad --date=short | sort -u`). Code written by Claude Code agents through `/build` (`process/claude-workflow.md`); I'm the one asked for product calls. Recount the days if more work lands before Nov 19.
+**Facts behind the new lines:** 9 distinct commit days (Jul 12, 13, 14, 15, 19 and Nov 5, 6, 7, 8; `git log --format=%ad --date=short | sort -u`). Code written by Claude Code agents through `/build` (`process/claude-workflow.md`); I'm the one asked for product calls. Recount the days if more work lands before Nov 12.
 
 ## Visual
 
