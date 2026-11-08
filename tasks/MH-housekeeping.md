@@ -32,6 +32,24 @@ depends-on: none
 **Files:** `app/src/app/layout.tsx`, `05-engines.md` (dependency budget)
 **Accept:** Privacy-friendly page and event analytics (e.g. Vercel Web Analytics, or a no-cookie alternative) with a handful of events: mode chosen, run pressed, challenge solved, design shared. A visible feedback link. Dependency-budget entry written.
 
+### H-4 — 32 px hit targets in the phase bar and review header
+- [ ] H-4 done
+
+**Files:** `app/src/components/panels/PhaseBar.tsx`, `app/src/components/review/ReviewScreen.tsx`, `app/src/components/boards/entities/` (toolbar, field and box buttons)
+**Accept:** Step chips, the back/nudge chip, Pause / +1m / Skip, the review tabs and header buttons, and the Entities board's "+ Entity", "+ field" and delete buttons are at least 32 px tall (the design standard's floor). Today they're ~26 px (follow-up from M13, see [[tasks/M13-practice-step-boards]] Decisions). The phase bar still fits on one line at 1280 px, return chip included. Screenshots before/after.
+
+### H-5 — No page scroll in the Practice workspace at 1440×900
+- [ ] H-5 done
+
+**Files:** `app/src/components/layout/PracticeWorkspace.tsx`, `app/src/components/hud/EventLog.tsx`
+**Accept:** At 1440×900 (and 1280×800) the page itself never scrolls: the right column's Event Log stays inside the viewport and the column above it scrolls on its own. Today the page scrolls ~48 px (noticed during M13; predates it).
+
+### H-6 — Readable entity diagram on the review screen at small viewports
+- [ ] H-6 done
+
+**Files:** `app/src/components/boards/entities/EntitiesBoard.tsx` (read-only mode)
+**Accept:** On the review screen's Entities tab at 1280×800, a 3-box diagram is readable without zooming: box text and crow's-foot ends are at least as large as on the editing board (today `fitView` with `maxZoom: 1` shrinks it to ~0.75). Pan/zoom still work.
+
 ## Decisions
 
 - (log deviations here)

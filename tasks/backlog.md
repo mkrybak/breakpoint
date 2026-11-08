@@ -16,7 +16,7 @@ Ordered. Work top to bottom; housekeeping ([[tasks/MH-housekeeping|MH]]) slots i
 | M9 | [[tasks/M9-components-and-cost\|More components + cost]] | WebSocket gateway, regions + geo-replication, sourced numbers, cost model + overlay | 7 |
 | M10 | [[tasks/M10-practice-depth\|Practice depth]] | Problem bank with hidden events + par cost, self-review, share by link | 4 |
 | M11 | [[tasks/M11-live-interview-mode\|Live Interview mode]] | Interviewer + candidate in one live session; first server-side piece | 6 |
-| MH | [[tasks/MH-housekeeping\|Housekeeping]] | Docs drift, lighter plans, usage signal | 3 |
+| MH | [[tasks/MH-housekeeping\|Housekeeping]] | Docs drift, lighter plans, usage signal, M13 UI follow-ups (32 px targets, page scroll, review diagram size) | 6 |
 
 ## Parked (not planned)
 
