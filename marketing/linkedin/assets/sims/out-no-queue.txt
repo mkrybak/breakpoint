@@ -1,0 +1,32 @@
+3× burst (burst-3x) — 20s @ 1500 RPS base, seed 42
+graph: ../marketing/linkedin/assets/sims/no-queue-burst.json — 3 nodes, 2 edges
+
+t(s)  served  p95(ms)   err%
+   0    1500    250.6   0.00
+      ! Workers running hot
+   1    1500    250.6   0.00
+   2    1500    250.6   0.00
+   3    1500    250.6   0.00
+   4    1500    250.6   0.00
+   5    3000   1711.6  33.33
+      ! Workers overloaded at 2k RPS — shedding load
+   6    2000   1711.6  55.56
+   7    2000   1711.6  55.56
+   8    1500   1459.8   0.00
+      ! Workers saturated at 2k RPS
+      ! Workers running hot
+   9    1500    250.6   0.00
+  10    1500    250.6   0.00
+  11    1500    250.6   0.00
+  12    1500    250.6   0.00
+  13    1500    250.6   0.00
+  14    1500    250.6   0.00
+  15    1500    250.6   0.00
+  16    1500    250.6   0.00
+  17    1500    250.6   0.00
+  18    1500    250.6   0.00
+  19    1500    250.6   0.00
+
+Verdict: FAIL
+  ✗ [p95] p95 above 250ms budget for over 5s starting t=0s
+  ✗ [error-rate] error rate 33.3% over 1.0% budget at t=5s

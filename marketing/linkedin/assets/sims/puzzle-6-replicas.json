@@ -1,0 +1,16 @@
+{
+  "entryNodeId": "client",
+  "nodes": [
+    { "id": "client", "kind": "client", "label": "Client", "position": { "x": 0, "y": 200 }, "config": {} },
+    { "id": "lb", "kind": "lb", "label": "Load balancer", "position": { "x": 200, "y": 200 }, "config": {} },
+    { "id": "app", "kind": "app_server", "label": "App servers", "position": { "x": 400, "y": 200 }, "config": { "replicas": 14 } },
+    { "id": "cache", "kind": "cache", "label": "Redis", "position": { "x": 600, "y": 200 }, "config": { "hitRate": 0.9 } },
+    { "id": "db", "kind": "db_sql", "label": "Postgres", "position": { "x": 800, "y": 200 }, "config": { "replicas": 6 } }
+  ],
+  "edges": [
+    { "id": "e-client-lb", "source": "client", "target": "lb", "callsPerRequest": 1, "kind": "sync" },
+    { "id": "e-lb-app", "source": "lb", "target": "app", "trafficShare": 1, "kind": "sync" },
+    { "id": "e-app-cache", "source": "app", "target": "cache", "callsPerRequest": 1, "kind": "sync" },
+    { "id": "e-cache-db", "source": "cache", "target": "db", "callsPerRequest": 1, "kind": "sync" }
+  ]
+}

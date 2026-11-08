@@ -1,0 +1,35 @@
+Dependency blip (dependency-blip) — 20s @ 3000 RPS base, seed 42
+graph: ../marketing/linkedin/assets/sims/retry-storm-breaker.json — 3 nodes, 2 edges
+
+t(s)  served  p95(ms)   err%
+   0    3000    109.7   0.00
+      ! Dependency running hot
+   1    3000    110.4   0.00
+   2    3000    110.4   0.00
+   3    3000    110.4   0.00
+   4    3000    110.4   0.00
+   5    6000    274.1   0.00
+      ! Dependency overloaded at 4k RPS — shedding load
+      ! App fleet → Dependency breaker open at 95% errors — failing fast
+   6       0     30.6 100.00
+      ! Dependency idle (breaker open)
+   7       0     30.6 100.00
+   8     300     32.9  90.00
+      ! App fleet → Dependency breaker half-open — probing
+      ! App fleet → Dependency breaker closed at 8.0s — traffic restored
+      ! Dependency running hot
+   9    3000    110.4   0.00
+  10    3000    110.4   0.00
+  11    3000    110.4   0.00
+  12    3000    110.4   0.00
+  13    3000    110.4   0.00
+  14    3000    110.4   0.00
+  15    3000    110.4   0.00
+  16    3000    110.4   0.00
+  17    3000    110.4   0.00
+  18    3000    110.4   0.00
+  19    3000    110.4   0.00
+
+Verdict: FAIL
+  ✗ [error-rate] error rate 58.8% over 1.0% budget at t=5.3s
+  ⛨ breaker App fleet → Dependency: 7907 requests failed fast, closed for good from t=8.1s

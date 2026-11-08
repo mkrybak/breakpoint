@@ -1,0 +1,30 @@
+Dependency blip (dependency-blip) — 20s @ 3000 RPS base, seed 42
+graph: examples/retry-storm.json — 3 nodes, 2 edges
+
+t(s)  served  p95(ms)   err%
+   0    3000    109.7   0.00
+      ! Dependency running hot
+   1    3000    110.4   0.00
+   2    3000    110.4   0.00
+   3    3000    110.4   0.00
+   4    3000    110.4   0.00
+   5    6000    274.1   0.00
+      ! Dependency overloaded at 4k RPS — shedding load
+   6       0   1665.3 100.00
+   7    1045    890.5  65.16
+   8    1046    890.4  65.14
+   9    1046    890.4  65.14
+  10    1046    890.4  65.14
+  11    1046    890.4  65.14
+  12    1046    890.4  65.14
+  13    1046    890.4  65.14
+  14    1046    890.4  65.14
+  15    1046    890.4  65.14
+  16    1046    890.4  65.14
+  17    1046    890.4  65.14
+  18    1046    890.4  65.14
+  19    1046    890.4  65.14
+
+Verdict: FAIL
+  ✗ [p95] p95 above 250ms budget for over 5s starting t=5s
+  ✗ [error-rate] error rate 58.8% over 1.0% budget at t=5.3s

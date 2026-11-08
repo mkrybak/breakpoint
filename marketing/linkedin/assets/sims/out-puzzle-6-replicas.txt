@@ -1,0 +1,42 @@
+Ticket sale opens (ticket-sale) — 30s @ 10000 RPS base, seed 42
+graph: ../marketing/linkedin/assets/sims/puzzle-6-replicas.json — 5 nodes, 4 edges
+
+t(s)  served  p95(ms)   err%
+   0   10000     39.0   0.00
+   1   10000     39.0   0.00
+   2   10000     39.0   0.00
+   3   10000     39.0   0.00
+   4   10000     39.0   0.00
+   5   10000     39.0   0.00
+   6   16000     45.6   0.00
+   7   22000     55.7   0.00
+      ! Postgres running hot
+   8   28000     75.0   0.00
+   9   34000    147.8   0.00
+      ! Postgres saturated at 15.6k RPS
+      ! Postgres overloaded at 17.3k RPS — shedding load
+      ! App servers running hot
+  10   40000    269.4   0.00
+  11   40000    327.9   0.00
+  12   40000    391.8   0.00
+  13   40000    459.0   0.00
+  14   40000    528.2   0.00
+  15   40000    598.8   0.00
+  16   40000    670.3   0.00
+  17   40000    742.4   0.00
+  18   40000    815.0   0.00
+  19   40000    888.0   0.00
+  20   39000    923.8   2.50
+  21   39000    923.8   2.50
+  22   39000    923.8   2.50
+  23   39000    923.8   2.50
+  24   39000    923.8   2.50
+  25   39000    923.8   2.50
+  26   39000    923.8   2.50
+  27   39000    923.8   2.50
+  28   39000    923.8   2.50
+  29   39000    923.8   2.50
+
+Verdict: FAIL
+  ✗ [p95] p95 above 250ms budget for over 5s starting t=9.7s
+  ✗ [error-rate] error rate 2.5% over 1.0% budget at t=19.6s

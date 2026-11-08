@@ -1,0 +1,11 @@
+{
+  "id": "ticket-sale",
+  "name": "Ticket sale opens",
+  "description": "Concert tickets go on sale: 10k RPS of browsing, then 40k RPS at 10:00 with 40% of requests buying.",
+  "durationSec": 30,
+  "baseRps": 10000,
+  "readRatio": 0.6,
+  "timeline": [{ "at": 5, "rule": "ramp", "toRps": 40000, "overSec": 5 }],
+  "pass": { "p95Ms": 250, "maxErrorRate": 0.01 },
+  "seed": 42
+}

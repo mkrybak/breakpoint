@@ -1,0 +1,12 @@
+{
+  "entryNodeId": "client",
+  "nodes": [
+    { "id": "client", "kind": "client", "label": "Client", "position": { "x": 0, "y": 200 }, "config": {} },
+    { "id": "app", "kind": "app_server", "label": "App servers", "position": { "x": 250, "y": 200 }, "config": { "replicas": 5 } },
+    { "id": "workers", "kind": "worker", "label": "Workers", "position": { "x": 750, "y": 200 }, "config": { "replicas": 2 } }
+  ],
+  "edges": [
+    { "id": "e-client-app", "source": "client", "target": "app", "callsPerRequest": 1, "kind": "sync" },
+    { "id": "e-app-workers", "source": "app", "target": "workers", "callsPerRequest": 1, "kind": "sync" }
+  ]
+}

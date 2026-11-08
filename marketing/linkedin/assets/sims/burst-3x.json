@@ -1,0 +1,11 @@
+{
+  "id": "burst-3x",
+  "name": "3× burst",
+  "description": "1,500 RPS of job submissions, then 3× for 3 seconds.",
+  "durationSec": 20,
+  "baseRps": 1500,
+  "readRatio": 0,
+  "timeline": [{ "at": 5, "rule": "spike", "factor": 3, "forSec": 3 }],
+  "pass": { "p95Ms": 250, "maxErrorRate": 0.01, "maxLagSec": 10 },
+  "seed": 42
+}
