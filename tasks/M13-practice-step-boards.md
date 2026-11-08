@@ -109,7 +109,8 @@ The inputs most likely to bite a user that no single board's happy path covers. 
 - Screenshots: two endpoints, one with invalid JSON.
 
 ### T-13.6 — Boards on the review screen and in the report
-- [ ] T-13.6 done
+- [x] T-13.6 done
+  - Added src/components/review/board-counts.ts and tests/review-boards.test.ts; demo e2e appended to practice-steps.spec.ts.
 
 **Files:** `src/components/review/ReviewScreen.tsx` (read-only board views next to the notes), `src/persistence/report.ts` (`buildReviewReport`), shared read-only renderers (reuse the T-13.3–13.5 components in a read-only mode where practical), tests, `e2e/practice-steps.spec.ts` (extend).
 **Accept:**
@@ -143,3 +144,7 @@ The inputs most likely to bite a user that no single board's happy path covers. 
 - 2026-11-08 (T-13.5, lead call): endpoint cards reorder with ↑/↓ buttons and Alt+↑/↓ instead of drag (tall cards drag badly; Accept only asks for reorder); Ctrl/⌘+Enter adds the next endpoint; "+ Endpoint" appends at the end of the list.
 - 2026-11-08 (T-13.5, lead call): JSON bodies get dependency-free coloring (lossless tokenizer under a transparent textarea); empty bodies show no hint; the status code is tinted by class but never validated.
 - 2026-11-08 (T-13.5, lead call): the step-aside slot (entity names on the API step) moved to the top of the right column, above Scenario/Requirements, so it's visible without scrolling.
+- 2026-11-07 (T-13.6 planning): review shows the boards as tabs over the main area (Design · Requirements · Entities · API, with counts), notes stay in the right column; each tab renders its board component with { readOnly: true, board } from design-store's boards (attach loads them after a bundle import), so review never writes the store. Report adds ## Requirements / ## Entities / ## API between Scores and the verdict ("User 1 → many Order"; "### METHOD url → status" + json fences sized past any backtick run).
+- 2026-11-08 (T-13.6, lead call): the review shows the boards as tabs over the main area (Design · Requirements · Entities · API, with counts) rather than squeezed into the 320 px notes column; notes and scorecard stay in the right column; picking a timeline event returns to Design.
+- 2026-11-08 (T-13.6, lead call): every board's read-only mode takes the board as a prop and never reads or writes design-store, so viewing a review can't mutate the graded artifact; a design with only boards still opens its review.
+- 2026-11-08 (T-13.6, lead call): report sections go between Scores and the verdict; relations in words ("User 1 → many Order"), endpoints as "### METHOD url → status" with verbatim json fences sized past any backtick run in the body.
