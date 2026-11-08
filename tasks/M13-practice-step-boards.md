@@ -67,7 +67,8 @@ The inputs most likely to bite a user that no single board's happy path covers. 
 - Screenshots: each step, the back chip, the timeout nudge, an HLD view of an earlier board during a run.
 
 ### T-13.3 — Requirements board
-- [ ] T-13.3 done
+- [x] T-13.3 done
+  - Seed helper lives in components/boards/requirements.ts; tests/phase-notes.test.ts replaced by tests/requirements-board.test.ts; own e2e/requirements-board.spec.ts.
 
 **Files:** new `src/components/boards/RequirementsBoard.tsx`, `src/components/panels/PhaseNotes.tsx` (stop seeding `nfrNotesTemplate` into notes), seeding helper (reuse the scenario values `nfrNotesTemplate` uses today), tests.
 **Accept:**
@@ -129,3 +130,6 @@ The inputs most likely to bite a user that no single board's happy path covers. 
 - 2026-11-08 (T-13.2, lead call): Skip and clicking a later chip move the view with the clock (they're "I'm moving on" clicks) and keep paused/running as is; only `tick` never moves the view.
 - 2026-11-08 (T-13.2, lead call): one return chip at a time — "← Back to X · mm:ss" after a manual look-back, the amber "Go to X →" nudge once the clock crossed a boundary on its own (`autoAdvanced`).
 - 2026-11-08 (T-13.2, lead call): step chips stay at the phase bar's existing ~26 px height (same as Pause/+1m/Skip), below the 32 px target — raising them means reworking the whole bar; backlog candidate.
+- 2026-11-07 (T-13.3): NFR seeding runs in PracticeWorkspace once the design is attached (so it also covers HLD opens and never runs on review or in Quick), once per design via the persisted nonFunctionalSeeded flag. Enter inserts below without splitting, ↑/↓ move focus, Alt+↑/↓ reorders, drag stays within a column. The notes template is gone.
+- 2026-11-08 (T-13.3, lead call): NFR seeding runs from PracticeWorkspace once the design-store has attached the record (so old designs opened straight into HLD get seeded too; review and Quick never seed); "once" uses T-13.1's persisted flag instead of the planner's session-only Set.
+- 2026-11-08 (T-13.3, lead call): Enter adds an empty item below without splitting the text at the caret; ↑/↓ move between items, Alt+↑/↓ reorder; drag stays within its own column; a seeded item keeps its "scenario" tag after being edited.

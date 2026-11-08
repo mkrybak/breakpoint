@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { Info } from "lucide-react";
+import { useSeedNonFunctional } from "@/components/boards/RequirementsBoard";
 import { StepAside, StepBoard } from "@/components/boards/StepBoard";
 import { DesignCanvas } from "@/components/canvas/DesignCanvas";
 import { EventLog } from "@/components/hud/EventLog";
@@ -31,6 +32,7 @@ export function PracticeWorkspace({
   /** one-line banner above the phase bar (interview fallback) */
   notice?: ReactNode;
 }) {
+  useSeedNonFunctional(designId);
   const viewedPhase = usePhaseStore((s) => s.viewedPhase);
   const board = hasStepBoard(viewedPhase) ? viewedPhase : null;
   return (

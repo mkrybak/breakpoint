@@ -81,6 +81,10 @@ app/
 │   │   │   ├── DesignWorkspace.tsx    # attach design, then pick the layout by mode
 │   │   │   ├── PracticeWorkspace.tsx  # today's full interview layout (+ interview-mode notice)
 │   │   │   └── SmallScreenNotice.tsx
+│   │   ├── boards/
+│   │   │   ├── StepBoard.tsx          # center board per step before HLD (+ right-column step asides)
+│   │   │   ├── RequirementsBoard.tsx  # Requirements step: two editable lists (+ read-only mode)
+│   │   │   └── requirements.ts        # NFR seed texts from the scenario
 │   │   ├── quick/
 │   │   │   ├── QuickWorkspace.tsx     # Quick layout: canvas, big Run, simple HUD, right column
 │   │   │   ├── QuickMenus.tsx         # "More scenarios" + "Break it"
