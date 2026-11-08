@@ -3,7 +3,7 @@ tags: [marketing, linkedin, post]
 status: ready
 week: W1
 publish: 2026-11-12
-target: "20–40 reactions"
+target: "15–30 reactions (no friend DMs in the warm-up)"
 ---
 
 # W1 — Launch
