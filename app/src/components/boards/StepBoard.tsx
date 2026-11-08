@@ -3,6 +3,7 @@
 import type { ComponentType } from "react";
 import type { BoardPhase, Phase } from "@/lib/core";
 import { phaseConfig } from "@/stores/phase-store";
+import { EntitiesBoard } from "./entities/EntitiesBoard";
 import { RequirementsBoard } from "./RequirementsBoard";
 
 /** The center board for a step before High-level design (M13). T-13.3/4/5 each swap one placeholder case for the real board. */
@@ -22,7 +23,7 @@ function BoardBody({ phase }: { phase: BoardPhase }) {
     case "requirements":
       return <RequirementsBoard />;
     case "entities":
-      return <BoardPlaceholder phase={phase} />; // T-13.4 replaces with <EntitiesBoard /> (./entities/EntitiesBoard)
+      return <EntitiesBoard />;
     case "api":
       return <BoardPlaceholder phase={phase} />; // T-13.5 replaces with <ApiBoard /> (./api/ApiBoard)
   }

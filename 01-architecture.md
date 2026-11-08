@@ -84,7 +84,8 @@ app/
 │   │   ├── boards/
 │   │   │   ├── StepBoard.tsx          # center board per step before HLD (+ right-column step asides)
 │   │   │   ├── RequirementsBoard.tsx  # Requirements step: two editable lists (+ read-only mode)
-│   │   │   └── requirements.ts        # NFR seed texts from the scenario
+│   │   │   ├── requirements.ts        # NFR seed texts from the scenario
+│   │   │   └── entities/              # Entities step board (M13): EntitiesBoard (edit + readOnly), EntityNode, RelationEdge (crow's-foot ends), RelationKindPicker, entity-flow.ts (pure)
 │   │   ├── quick/
 │   │   │   ├── QuickWorkspace.tsx     # Quick layout: canvas, big Run, simple HUD, right column
 │   │   │   ├── QuickMenus.tsx         # "More scenarios" + "Break it"

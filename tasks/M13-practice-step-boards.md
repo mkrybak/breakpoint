@@ -81,7 +81,8 @@ The inputs most likely to bite a user that no single board's happy path covers. 
 - Screenshots: fresh design, edited lists.
 
 ### T-13.4 — Entities board
-- [ ] T-13.4 done
+- [x] T-13.4 done
+  - Picker wrapper stops click propagation (else the edge onClick reopened it); own e2e/entities-board.spec.ts; BoardPlaceholder kept until T-13.5.
 
 **Files:** new `src/components/boards/entities/` (board, entity node, relation edge with crow's-foot markers, type picker), tests.
 **Accept:**
@@ -133,3 +134,7 @@ The inputs most likely to bite a user that no single board's happy path covers. 
 - 2026-11-07 (T-13.3): NFR seeding runs in PracticeWorkspace once the design is attached (so it also covers HLD opens and never runs on review or in Quick), once per design via the persisted nonFunctionalSeeded flag. Enter inserts below without splitting, ↑/↓ move focus, Alt+↑/↓ reorders, drag stays within a column. The notes template is gone.
 - 2026-11-08 (T-13.3, lead call): NFR seeding runs from PracticeWorkspace once the design-store has attached the record (so old designs opened straight into HLD get seeded too; review and Quick never seed); "once" uses T-13.1's persisted flag instead of the planner's session-only Set.
 - 2026-11-08 (T-13.3, lead call): Enter adds an empty item below without splitting the text at the caret; ↑/↓ move between items, Alt+↑/↓ reorder; drag stays within its own column; a seeded item keeps its "scenario" tag after being edited.
+- 2026-11-08 (T-13.4 planning): Entities board — self-relations allowed (orthogonal loop over the box, same crow's-foot ends); a line's end can be re-pointed by dragging it onto another box (React Flow reconnect → repointRelation, kind kept, duplicates refused); fixed handles (target left, source right) so kinds read from → to; duplicate pairs refused while dragging; field types are free text with a native datalist of suggestions; "+ Entity" grid-scans the visible viewport for a free cell; box inputs read design-store directly (React Flow's controlled-nodes sync is async and would drop the caret); picker opens on line click or keyboard select, closes on choose/Escape/pane click, holds Delete; viewport not persisted (fitView on mount only when the board already has boxes); readOnly mode renders a passed board with no store access (T-13.6).
+- 2026-11-08 (T-13.4, lead call): self-relations allowed (drawn as a loop over the box) and a line's end can be re-pointed by dragging it onto another box (kind kept, duplicate pairs refused) — both cheap and match real ER modelling (User follows User).
+- 2026-11-08 (T-13.4, lead call): the editable board fits the view on mount only when it already has boxes; an empty board keeps the default viewport so the second "+ Entity" box lands beside the first instead of after a view jump.
+- 2026-11-08 (T-13.4, lead call): toolbar hint never mentions lines before one exists ("Drag from a box's right dot onto another box (or itself)…" until the first relation).
