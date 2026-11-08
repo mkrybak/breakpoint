@@ -91,9 +91,10 @@ export function PracticeWorkspace({
               >
                 Open review screen →
               </Link>
+              {/* Step extras (entity names on API) sit on top so they're visible without scrolling (M13). */}
+              <StepAside phase={viewedPhase} />
               <ScenarioPanel />
               <RequirementsPanel />
-              <StepAside phase={viewedPhase} />
               <PhaseNotes />
             </div>
             <EventLog />

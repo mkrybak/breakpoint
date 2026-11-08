@@ -96,7 +96,8 @@ The inputs most likely to bite a user that no single board's happy path covers. 
 - Screenshots: the demo's User / Order / Product board with an open picker, at 1440×900 and 1280×800.
 
 ### T-13.5 — API board
-- [ ] T-13.5 done
+- [x] T-13.5 done
+  - No PracticeWorkspace mount (uses T-13.2's STEP_ASIDES); lead moved StepAside to the top of the right column; row inputs use a local ROW_INPUT (shared INPUT's w-full/mt-1 broke the row); icon buttons 32px.
 
 **Files:** new `src/components/boards/api/` (endpoint list, endpoint card, JSON field), tests.
 **Accept:**
@@ -138,3 +139,7 @@ The inputs most likely to bite a user that no single board's happy path covers. 
 - 2026-11-08 (T-13.4, lead call): self-relations allowed (drawn as a loop over the box) and a line's end can be re-pointed by dragging it onto another box (kind kept, duplicate pairs refused) — both cheap and match real ER modelling (User follows User).
 - 2026-11-08 (T-13.4, lead call): the editable board fits the view on mount only when it already has boxes; an empty board keeps the default viewport so the second "+ Entity" box lands beside the first instead of after a view jump.
 - 2026-11-08 (T-13.4, lead call): toolbar hint never mentions lines before one exists ("Drag from a box's right dot onto another box (or itself)…" until the first relation).
+- 2026-11-07 (T-13.5): API bodies are colored by a dependency-free lossless tokenizer under a transparent textarea (auto-growing, no scroll sync); empty bodies are fine, invalid JSON shows a reserved-space hint and is stored verbatim. Cards reorder with ↑/↓ buttons or Alt+↑/↓ (not drag); Ctrl/⌘+Enter adds the next endpoint. The entity-names list follows the viewed step.
+- 2026-11-08 (T-13.5, lead call): endpoint cards reorder with ↑/↓ buttons and Alt+↑/↓ instead of drag (tall cards drag badly; Accept only asks for reorder); Ctrl/⌘+Enter adds the next endpoint; "+ Endpoint" appends at the end of the list.
+- 2026-11-08 (T-13.5, lead call): JSON bodies get dependency-free coloring (lossless tokenizer under a transparent textarea); empty bodies show no hint; the status code is tinted by class but never validated.
+- 2026-11-08 (T-13.5, lead call): the step-aside slot (entity names on the API step) moved to the top of the right column, above Scenario/Requirements, so it's visible without scrolling.
