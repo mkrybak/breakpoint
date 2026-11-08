@@ -13,21 +13,26 @@ target: "20–40 reactions"
 
 ## Draft
 
-> I've been quietly building something since July.
+> In a coding interview you can run your code.
+> In system design you draw boxes and hope.
 >
-> It's called BreakMyDesign.
+> So I built a Run button for diagrams. It's called BreakMyDesign.
 >
 > You draw a system design, like in an interview. Press Run, and it sends traffic through it. Green holds. Red breaks.
 >
 > In the clip: one app server, then 3x traffic for ten seconds. It falls over. I add a second server, run it again, and it holds.
 >
-> Why I built it: every design has a breaking point. I wanted people to find theirs before the interview does.
+> I didn't have time for a big side project. So it got built in 9 days: a few in July, a few this month. AI agents wrote most of the code. I decided what it should do and what "correct" means.
 >
-> In a coding interview you can run your code. In system design you draw boxes and hope. I wanted a Run button for diagrams.
+> Every design has a breaking point. I wanted people to find theirs before the interview does.
 >
-> It's a side project and still rough. Over the next few weeks I'll share what it taught me, including the times my own simulator was wrong.
+> It's still rough. Over the next few weeks I'll share what it taught me, including the times my own simulator was wrong.
 >
 > Link in the comments if you want to break something.
+
+**Above "…more":** "In a coding interview you can run your code. / In system design you draw boxes and hope. / So I built a Run button for diagrams…": the hook works on its own.
+
+**Facts behind the new lines:** 9 distinct commit days (Jul 12, 13, 14, 15, 19 and Nov 5, 6, 7, 8; `git log --format=%ad --date=short | sort -u`). Code written by Claude Code agents through `/build` (`process/claude-workflow.md`); I'm the one asked for product calls. Recount the days if more work lands before Nov 17.
 
 ## Visual
 
@@ -38,6 +43,8 @@ target: "20–40 reactions"
 ## Fill before posting
 
 - [x] "Why I built it": filled from the product's own tagline ("Every design has a breaking point. Find yours before the interview does."), so it claims nothing I haven't said
+- [x] Opening rewritten 2026-11-08: "quietly building since July" overstated it (9 working days, AI wrote most of the code), and it was weak above "…more"
+- [ ] Recount commit days on posting day
 - [ ] Watch the video on a phone once
 
 ### Other "why" options (only if true for me; each makes a personal claim)
