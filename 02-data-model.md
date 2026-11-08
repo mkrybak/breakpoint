@@ -161,7 +161,7 @@ Every meaningful candidate action is recorded with a timestamp and interview pha
 ```ts
 type ActionKind =
   | "node_added" | "node_removed" | "node_renamed" | "config_changed"
-  | "edge_added" | "edge_removed" | "note_edited"
+  | "edge_added" | "edge_removed" | "note_edited" | "board_edited"
   | "phase_started" | "sim_run" | "chaos_injected";
 
 interface ActionEvent {
@@ -183,6 +183,7 @@ interface DesignRecord {       // localStorage key: bp:design:<id>
   id: string; name: string; mode: "quick" | "practice" | "interview"; scenarioId: string;
   graph: DesignGraph;
   phaseNotes: Record<Phase, string>;   // framework artifacts: reqs, NFRs, entities, API sketch
+  boards: DesignBoards;        // step boards (M13): requirements lists, entity board, API endpoints
   actionLog: ActionEvent[];
   updatedAt: string;           // ISO
 }
@@ -199,6 +200,28 @@ interface Scorecard {
   runExportedAt: string;
   rubricScores: Record<Phase, { score: 1 | 2 | 3 | 4 | 5; feedbackMd: string }>;
   overall: "strong-hire" | "hire" | "no-hire";
+}
+```
+
+Step boards (M13; types in `core/boards.ts`, guard `parseDesignBoards` in `persistence/boards.ts`). Key order below is the serialisation order; the guard and the store rebuild objects in it so a round-trip is byte-identical:
+
+```ts
+interface DesignBoards { requirements: RequirementsBoard; entities: EntitiesBoard; api: ApiBoard }
+interface RequirementsBoard {
+  functional: RequirementItem[]; nonFunctional: RequirementItem[];
+  nonFunctionalSeeded: boolean;  // NFR seeding ran once for this design; never re-runs
+}
+interface RequirementItem { id: string; text: string; source?: "scenario" }
+interface EntitiesBoard { entities: EntityBox[]; relations: EntityRelation[] }
+interface EntityBox { id: string; name: string; fields: { id: string; name: string; type: string }[]; position: { x: number; y: number } }
+interface EntityRelation {     // kind reads from → to: "one-to-many" = crow's foot at `to`
+  id: string; from: string; to: string;
+  kind: "one-to-one" | "one-to-many" | "many-to-one" | "many-to-many";
+}
+interface ApiBoard { endpoints: ApiEndpoint[] }
+interface ApiEndpoint {        // status and bodies are raw text as typed (bodies may be invalid JSON)
+  id: string; method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+  url: string; status: string; requestBody: string; responseBody: string;
 }
 ```
 
@@ -249,3 +272,4 @@ scorecards   (id, run_id, grader_id → users, rubric_scores JSONB, feedback_md 
 - 2026-11-07 (T-12.1 planning): `EdgeFrame.failedFastRps?` and `Verdict.breakerTrips?: BreakerTrip[]` ({ edgeId, sourceLabel, targetId, targetLabel, failedFast, recoveredAtSec: number | null }) are optional and present only when non-zero / non-empty, so old frames, runs and bundles stay valid.
 - 2026-11-07 (T-12.5 planning): `SimFrame.p95ByNode?: Record<string, number>` (node id → ms of p95Ms, Euler split of mean + 2σ; rounded to 0.01 ms, zero entries omitted, absent when nothing is positive). Optional and additive: no other frame value changes, and pre-T-12.5 bundles simply lack it (the HUD popover then shows only the explanation).
 - 2026-11-07 (T-12.7 planning): Practice phase clock persisted per design under bp:phase:<id> (separate key, not in DesignRecord/exports); restored as saved, with no wall-clock catch-up; phase_started is recorded only for the attached design's own clock, so attach-restore and landing reset() record nothing.
+- 2026-11-07 (T-13.1 planning): DesignRecord.boards: DesignBoards { requirements, entities, api } (types in core/boards.ts; constants + forgiving guard parseDesignBoards in persistence/boards.ts). Missing/malformed boards load empty, bad items and dangling relations drop, duplicate ids drop; no migration, RunBundle.version stays 1. Board edits record a new ActionKind board_edited ("edited requirements|entities|API"), debounced 1 s per board in design-store; entity drags and NFR seeding record nothing. NFR seeding is once per design via the persisted RequirementsBoard.nonFunctionalSeeded. RelationKind reads from → to; the store rejects duplicate entity pairs, allows self-relations.

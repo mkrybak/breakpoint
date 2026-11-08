@@ -1,6 +1,7 @@
 import type {
   ActionEvent,
   ComponentKind,
+  DesignBoards,
   DesignEdge,
   DesignGraph,
   DesignNode,
@@ -15,6 +16,7 @@ import { COMPONENT_KINDS, isSplitSource } from "@/lib/registry";
 import { parseScenario } from "@/lib/scenarios";
 import { parseScorecard, scorecardStorageKey } from "./scorecard";
 import { phaseClockStorageKey } from "./phase-clock";
+import { emptyBoards, parseDesignBoards } from "./boards";
 
 /** Product mode (product-modes spec). Shell-only: engines never see it. */
 export type DesignMode = "quick" | "practice" | "interview";
@@ -31,6 +33,8 @@ export interface DesignRecord {
   scenarioId: string;
   graph: DesignGraph;
   phaseNotes: Record<Phase, string>;
+  /** Step boards (M13); empty boards when missing. */
+  boards: DesignBoards;
   actionLog: ActionEvent[];
   /** ISO timestamp */
   updatedAt: string;
@@ -56,6 +60,7 @@ export function buildDesignRecord(
   mode: DesignMode,
   phaseNotes: Record<Phase, string> = emptyPhaseNotes(),
   actionLog: ActionEvent[] = [],
+  boards: DesignBoards = emptyBoards(),
 ): DesignRecord {
   return {
     id,
@@ -64,6 +69,7 @@ export function buildDesignRecord(
     scenarioId: "",
     graph,
     phaseNotes,
+    boards,
     actionLog,
     updatedAt: new Date().toISOString(),
   };
@@ -96,7 +102,8 @@ export function loadDesign(id: string): DesignRecord | null {
  * node kind would crash the canvas — forgiving on the rest, so files missing
  * M4-era fields still load with defaults. A missing or unknown `mode` loads as
  * `"practice"` (no migration). Legacy edges migrate on read (T-8.3); the
- * stored record is rewritten only by the next autosave.
+ * stored record is rewritten only by the next autosave. Missing or malformed
+ * `boards` load as empty boards; bad items and dangling relations are dropped (M13).
  */
 export function parseDesignRecord(text: string): DesignRecord | null {
   let value: unknown;
@@ -127,6 +134,7 @@ export function parseDesignRecord(text: string): DesignRecord | null {
     scenarioId: typeof value.scenarioId === "string" ? value.scenarioId : "",
     graph,
     phaseNotes,
+    boards: parseDesignBoards(value.boards),
     actionLog: Array.isArray(value.actionLog)
       ? value.actionLog.filter(isValidActionEvent)
       : [],
@@ -335,7 +343,10 @@ function isValidActionEvent(value: unknown): value is ActionEvent {
   );
 }
 
-/** The export file the grader imports: <name>.breakpoint.json (02-data-model). */
+/**
+ * The export file the grader imports: <name>.breakpoint.json (02-data-model).
+ * version stays 1: boards are additive (M13).
+ */
 export interface RunBundle {
   version: 1;
   design: DesignRecord;

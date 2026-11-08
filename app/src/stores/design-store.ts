@@ -8,12 +8,15 @@ import {
 import { create } from "zustand";
 import type {
   ActionEvent,
+  BoardPhase,
   ComponentKind,
+  DesignBoards,
   DesignEdge,
   DesignGraph,
   Phase,
 } from "@/lib/core";
 import {
+  boardEditedAction,
   diffGraph,
   phaseStartedAction,
   stampAction,
@@ -29,6 +32,8 @@ import {
   type DesignMode,
   type DesignRecord,
 } from "@/persistence/local";
+import { BOARD_PHASES, emptyBoards } from "@/persistence/boards";
+import { createBoardActions, type BoardActions } from "./board-actions";
 import {
   fromFlow,
   toFlow,
@@ -40,7 +45,7 @@ import { usePhaseStore } from "./phase-store";
 
 const DEFAULT_DESIGN_NAME = "Untitled design";
 
-interface DesignStore {
+interface DesignStore extends BoardActions {
   graph: DesignGraph;
   /** localStorage slot this session autosaves to; null until a page attaches. */
   designId: string | null;
@@ -56,6 +61,8 @@ interface DesignStore {
   measured: NodeMeasurements;
   /** Per-phase markdown notes (T-4.2); persisted in the design record. */
   phaseNotes: Record<Phase, string>;
+  /** Step boards (M13); persisted in the design record. Edit via the BoardActions. */
+  boards: DesignBoards;
   /** Recorded candidate actions (T-4.3); persisted in the design record. */
   actionLog: ActionEvent[];
   /**
@@ -109,7 +116,7 @@ interface DesignStore {
   recordAction: (event: ActionEvent) => void;
   /** Bind this session to a design id and load its autosaved record, if any. */
   attachDesign: (id: string) => void;
-  /** Adopt an imported file's graph, name, notes and log; the attached designId and designMode are kept (in-place import never converts a mode). */
+  /** Adopt an imported file's graph, name, notes, boards and log; the attached designId and designMode are kept (in-place import never converts a mode). */
   importRecord: (record: DesignRecord) => void;
   setGraph: (graph: DesignGraph) => void;
 }
@@ -192,7 +199,27 @@ function applyEdgePatch(
   return next;
 }
 
-export const useDesignStore = create<DesignStore>((set) => ({
+const BOARD_RECORD_DEBOUNCE_MS = 1000;
+const boardRecordTimers: Partial<Record<BoardPhase, ReturnType<typeof setTimeout>>> = {};
+
+/** One board_edited per burst per board (like note_edited). */
+function scheduleBoardEditRecord(board: BoardPhase): void {
+  clearTimeout(boardRecordTimers[board]);
+  boardRecordTimers[board] = setTimeout(() => {
+    delete boardRecordTimers[board];
+    recordInterviewAction(boardEditedAction(board));
+  }, BOARD_RECORD_DEBOUNCE_MS);
+}
+
+/** Drop pending board_edited records (attach/import must not record into the new design). */
+function cancelBoardEditRecords(): void {
+  for (const board of BOARD_PHASES) {
+    clearTimeout(boardRecordTimers[board]);
+    delete boardRecordTimers[board];
+  }
+}
+
+export const useDesignStore = create<DesignStore>((set, get) => ({
   graph: emptyGraph(),
   designId: null,
   designName: DEFAULT_DESIGN_NAME,
@@ -201,6 +228,7 @@ export const useDesignStore = create<DesignStore>((set) => ({
   selectedEdgeIds: [],
   measured: {},
   phaseNotes: emptyPhaseNotes(),
+  boards: emptyBoards(),
   actionLog: [],
   actionSnapshots: [],
 
@@ -345,6 +373,7 @@ export const useDesignStore = create<DesignStore>((set) => ({
 
   attachDesign: (id) => {
     const record = loadDesign(id);
+    cancelBoardEditRecords();
     withoutRecording(() =>
       set({
         designId: id,
@@ -355,13 +384,15 @@ export const useDesignStore = create<DesignStore>((set) => ({
         selectedEdgeIds: [],
         measured: {},
         phaseNotes: record?.phaseNotes ?? emptyPhaseNotes(),
+        boards: record?.boards ?? emptyBoards(),
         actionLog: record?.actionLog ?? [],
         actionSnapshots: [],
       }),
     );
   },
 
-  importRecord: (record) =>
+  importRecord: (record) => {
+    cancelBoardEditRecords();
     withoutRecording(() =>
       set({
         graph: record.graph,
@@ -370,15 +401,24 @@ export const useDesignStore = create<DesignStore>((set) => ({
         selectedEdgeIds: [],
         measured: {},
         phaseNotes: record.phaseNotes,
+        boards: record.boards,
         actionLog: record.actionLog,
         actionSnapshots: [],
       }),
-    ),
+    );
+  },
 
   setGraph: (graph) =>
     withoutRecording(() =>
       set({ graph, selectedNodeIds: [], selectedEdgeIds: [], measured: {} }),
     ),
+
+  ...createBoardActions(
+    () => get().boards,
+    (boards) => set({ boards }),
+    scheduleBoardEditRecord,
+    () => get().designId !== null,
+  ),
 }));
 
 /**
@@ -405,6 +445,7 @@ useDesignStore.subscribe((state, prev) => {
     state.graph === prev.graph &&
     state.designName === prev.designName &&
     state.phaseNotes === prev.phaseNotes &&
+    state.boards === prev.boards &&
     state.actionLog === prev.actionLog
   ) {
     return;
@@ -421,6 +462,7 @@ useDesignStore.subscribe((state, prev) => {
         s.designMode,
         s.phaseNotes,
         s.actionLog,
+        s.boards,
       ),
     );
   }, AUTOSAVE_DELAY_MS);

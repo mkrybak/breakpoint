@@ -20,6 +20,7 @@ import {
 } from "../src/persistence/local";
 import { scorecardStorageKey } from "../src/persistence/scorecard";
 import { phaseClockStorageKey } from "../src/persistence/phase-clock";
+import { emptyBoards } from "../src/persistence/boards";
 
 function createStorageMock() {
   const data = new Map<string, string>();
@@ -216,6 +217,7 @@ function recordAt(id: string, name: string, updatedAt: string): DesignRecord {
       hld: "",
       deepdive: "",
     },
+    boards: emptyBoards(),
     actionLog: [],
     updatedAt,
   };

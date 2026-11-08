@@ -33,11 +33,12 @@ export function exportCurrentDesign(): void {
       s.designMode,
       s.phaseNotes,
       s.actionLog,
+      s.boards,
     ),
   );
 }
 
-/** Replace the attached design with a file's graph, name, notes and log (mode kept, T-7.2). Returns whether it imported. */
+/** Replace the attached design with a file's graph, name, notes, boards and log (mode kept, T-7.2). Returns whether it imported. */
 export async function importDesignFile(file: File): Promise<boolean> {
   let text: string;
   try {

@@ -9,6 +9,7 @@ export type ActionKind =
   | "edge_added"
   | "edge_removed"
   | "note_edited"
+  | "board_edited"
   | "phase_started"
   | "sim_run"
   | "chaos_injected";

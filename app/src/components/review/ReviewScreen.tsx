@@ -34,6 +34,7 @@ export function ReviewScreen({ runId }: { runId: string }) {
   const actionLog = useDesignStore((s) => s.actionLog);
   const actionSnapshots = useDesignStore((s) => s.actionSnapshots);
   const phaseNotes = useDesignStore((s) => s.phaseNotes);
+  const boards = useDesignStore((s) => s.boards);
   const runGraph = useSimStore((s) => s.runGraph);
   const runScenario = useSimStore((s) => s.runScenario);
   const result = useSimStore((s) => s.result);
@@ -62,6 +63,7 @@ export function ReviewScreen({ runId }: { runId: string }) {
       designMode,
       phaseNotes,
       actionLog,
+      boards,
     );
     exportRunBundleFile(buildRunBundle(design, runScenario, result, scorecard));
   };

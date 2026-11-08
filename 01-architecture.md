@@ -131,9 +131,11 @@ app/
 │   │       └── recorder.ts       # records ActionEvents (node added, config changed, note edited...)
 │   ├── persistence/
 │   │   ├── local.ts              # localStorage autosave + JSON export/import; DesignRecord.mode
+│   │   ├── boards.ts             # step-board constants, emptyBoards, parseDesignBoards (M13)
 │   │   └── challenges.ts         # Quick challenge solved state (bp:challenges:solved)
 │   └── stores/
 │       ├── design-store.ts       # zustand: graph, selection
+│       ├── board-actions.ts      # design-store step-board actions (M13)
 │       ├── design-file-store.ts  # export/import of the attached design + import error
 │       ├── scenario-store.ts     # zustand: selected preset + edited NFRs
 │       └── sim-store.ts          # zustand: run state, frames, log

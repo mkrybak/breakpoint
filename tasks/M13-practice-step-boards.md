@@ -36,7 +36,8 @@ The inputs most likely to bite a user that no single board's happy path covers. 
 ## Tasks
 
 ### T-13.1 — Board data: types, persistence, store
-- [ ] T-13.1 done
+- [x] T-13.1 done
+  - Also added src/persistence/boards.ts (core stays type-only), src/stores/board-actions.ts, design-file-store/ReviewScreen pass boards to export; moveById maps NaN→0/+Inf→last.
 
 **Files:** `src/lib/core/` (new `boards.ts` + `index.ts` export), `src/persistence/local.ts` (`DesignRecord`, `buildDesignRecord`, `parseDesignRecord`, `RunBundle` round-trip), `src/stores/design-store.ts` (state, actions, autosave), `src/lib/core/action.ts` (if a new action kind is used), `../02-data-model.md` (shapes + a Decisions line), tests.
 **Accept:**
@@ -117,3 +118,9 @@ The inputs most likely to bite a user that no single board's happy path covers. 
 
 - (log deviations here)
 - 2026-11-07: Milestone scoped from the step-boards spec. User calls are in the spec's Decisions: crow's-foot lines with no text, the clock keeps running when viewing back, the view stays on timeout, a board replaces only the canvas in HLD, and the requirements and endpoint shapes per the approved mockups.
+- T-13.1: `DesignRecord.boards`, version stays 1, `board_edited`, persisted `nonFunctionalSeeded`; see 02-data-model.
+- 2026-11-08 (T-13.1, lead call): record field `DesignRecord.boards: { requirements, entities, api }`; `RunBundle.version` stays 1 (boards are additive, forgiving parse) — old bundles load unchanged, no migration.
+- 2026-11-08 (T-13.1, lead call): board edits record a new `board_edited` ActionKind ("edited requirements|entities|API"), debounced 1 s per board inside design-store; entity drags and NFR seeding record nothing — timeline shows when an artifact changed without per-keystroke noise.
+- 2026-11-08 (T-13.1, lead call): NFR seeding "once" is persisted (`RequirementsBoard.nonFunctionalSeeded`), so an emptied Non-functional list stays empty across reloads; T-13.3's session-only Set was replaced by this flag — the user's deletion should stick.
+- 2026-11-08 (T-13.1, lead call): `ApiEndpoint.status` is a raw string (default "200"), never coerced — half-typed status never needs draft state.
+- 2026-11-08 (T-13.1, lead call): the store rejects a second relation between the same two entities (either direction) and allows self-relations; `RelationKind` reads from → to (crow's foot for "many" at that end).

@@ -48,6 +48,7 @@ export const ACTION_KIND_LABEL: Record<ActionKind, string> = {
   edge_added: "connect",
   edge_removed: "disconnect",
   note_edited: "note",
+  board_edited: "board",
   phase_started: "phase",
   sim_run: "run",
   chaos_injected: "chaos",

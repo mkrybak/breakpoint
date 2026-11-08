@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { DesignGraph, StressRule } from "../src/lib/core";
 import {
+  boardEditedAction,
   chaosAction,
   diffGraph,
   noteEditedAction,
@@ -109,6 +110,17 @@ describe("emitters", () => {
     expect(simRunAction("Black Friday")).toEqual({
       kind: "sim_run",
       detail: "ran Black Friday",
+    });
+  });
+
+  it("boardEditedAction names the board", () => {
+    expect(boardEditedAction("api")).toEqual({
+      kind: "board_edited",
+      detail: "edited API",
+    });
+    expect(boardEditedAction("entities")).toEqual({
+      kind: "board_edited",
+      detail: "edited entities",
     });
   });
 

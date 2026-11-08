@@ -1,6 +1,7 @@
 import type {
   ActionEvent,
   ActionKind,
+  BoardPhase,
   DesignEdge,
   DesignGraph,
   DesignNode,
@@ -128,6 +129,17 @@ export function phaseStartedAction(phase: Phase): DraftAction {
 /** A phase note was edited (the caller debounces bursts of typing). */
 export function noteEditedAction(): DraftAction {
   return { kind: "note_edited", detail: "edited notes" };
+}
+
+const BOARD_NAME: Record<BoardPhase, string> = {
+  requirements: "requirements",
+  entities: "entities",
+  api: "API",
+};
+
+/** A step board was edited (the design store debounces bursts per board). */
+export function boardEditedAction(board: BoardPhase): DraftAction {
+  return { kind: "board_edited", detail: `edited ${BOARD_NAME[board]}` };
 }
 
 /** The candidate launched the simulation. */
