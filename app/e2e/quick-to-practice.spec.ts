@@ -108,7 +108,7 @@ test("landing → Quick → Run → Passed → Try a full practice interview →
   await expect(page).toHaveURL(DESIGN_URL);
   expect(page.url()).not.toBe(quickUrl);
 
-  // Practice layout, fresh interview: phase 1 with a full clock, canvas locked
+  // Practice layout, fresh interview: phase 1 with a full clock, Requirements board
   await expect(page.locator('[aria-current="step"]')).toContainText(
     "Requirements",
   );
@@ -116,7 +116,7 @@ test("landing → Quick → Run → Passed → Try a full practice interview →
     /^0[45]:\d\d$/,
   );
   await expect(
-    page.getByText(/Canvas unlocks in the High-level design phase/),
+    page.getByRole("region", { name: "Requirements board" }),
   ).toBeVisible();
   // nothing leaked from Quick: no verdict, no run, Practice's default preset, no Quick UI
   await expect(

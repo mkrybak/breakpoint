@@ -1,17 +1,30 @@
 "use client";
 
 import { useEffect, useLayoutEffect } from "react";
-import { ChevronRight, Pause, Play, Plus } from "lucide-react";
+import {
+  ArrowLeft,
+  ArrowRight,
+  Check,
+  ChevronRight,
+  Eye,
+  Pause,
+  Play,
+  Plus,
+} from "lucide-react";
 import {
   PHASES,
   formatClock,
+  phaseConfig,
   phaseIndex,
   usePhaseStore,
+  viewReturn,
 } from "@/stores/phase-store";
 import { useDesignStore } from "@/stores/design-store";
 
 const BTN =
   "flex items-center gap-1 rounded-lg border border-neutral-700 bg-neutral-900 px-2.5 py-1 text-xs font-medium text-neutral-200 hover:border-neutral-500 disabled:cursor-not-allowed disabled:opacity-40";
+const CHIP =
+  "flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-medium transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-300";
 
 export function PhaseBar() {
   const designId = useDesignStore((s) => s.designId);
@@ -30,6 +43,10 @@ export function PhaseBar() {
   const skip = usePhaseStore((s) => s.skip);
   const extend = usePhaseStore((s) => s.extend);
   const toggleRunning = usePhaseStore((s) => s.toggleRunning);
+  const viewedPhase = usePhaseStore((s) => s.viewedPhase);
+  const autoAdvanced = usePhaseStore((s) => s.autoAdvanced);
+  const goToStep = usePhaseStore((s) => s.goToStep);
+  const ret = viewReturn({ phase, viewedPhase, autoAdvanced });
 
   // Drive the countdown at 1 Hz. `tick` no-ops while paused, so the interval can
   // run for the component's lifetime. Reading the action via getState() keeps
@@ -49,25 +66,77 @@ export function PhaseBar() {
       <ol className="flex items-center gap-1">
         {PHASES.map((p, i) => {
           const state =
-            i < currentIndex ? "done" : i === currentIndex ? "active" : "next";
-          const cls =
-            state === "active"
+            i < currentIndex ? "done" : i === currentIndex ? "current" : "next";
+          const viewed = p.phase === viewedPhase;
+          const base =
+            state === "current"
               ? "border-sky-500/60 bg-sky-500/15 text-sky-200"
               : state === "done"
-                ? "border-neutral-800 bg-neutral-900 text-neutral-500"
-                : "border-neutral-800 bg-neutral-900 text-neutral-600";
+                ? "border-neutral-800 bg-neutral-900 text-neutral-400 hover:border-neutral-600 hover:text-neutral-200"
+                : "border-neutral-800 bg-neutral-900 text-neutral-600 hover:border-neutral-600 hover:text-neutral-300";
+          const viewedCls =
+            viewed && state !== "current"
+              ? "ring-2 ring-neutral-300/60 text-neutral-100"
+              : "";
+          const nudgeCls =
+            state === "current" && ret?.kind === "nudge"
+              ? "ring-2 ring-amber-400/70"
+              : "";
+          const title =
+            state === "done"
+              ? `View ${p.label} (the clock stays on ${phaseConfig(phase).label})`
+              : state === "next"
+                ? `Jump to ${p.label} (starts its timer)`
+                : "Current step";
           return (
-            <li
-              key={p.phase}
-              className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-medium ${cls}`}
-              aria-current={state === "active" ? "step" : undefined}
-            >
-              <span className="font-mono text-[10px] opacity-60">{i + 1}</span>
-              {p.label}
+            <li key={p.phase}>
+              <button
+                type="button"
+                onClick={() => goToStep(p.phase)}
+                aria-label={`${p.label} step`}
+                aria-current={state === "current" ? "step" : undefined}
+                aria-pressed={viewed}
+                title={title}
+                className={`${CHIP} ${base} ${viewedCls} ${nudgeCls}`}
+              >
+                {state === "done" ? (
+                  <Check className="h-3 w-3" />
+                ) : (
+                  <span className="font-mono text-[10px] opacity-60">
+                    {i + 1}
+                  </span>
+                )}
+                {p.label}
+                {viewed && state !== "current" && <Eye className="h-3 w-3" />}
+              </button>
             </li>
           );
         })}
       </ol>
+      {ret && (
+        <button
+          type="button"
+          onClick={() => goToStep(ret.phase)}
+          className={`${CHIP} ${
+            ret.kind === "nudge"
+              ? "border-amber-500/50 bg-amber-500/10 text-amber-200 hover:border-amber-400"
+              : "border-neutral-600 bg-neutral-800 text-neutral-100 hover:border-neutral-400"
+          }`}
+        >
+          {ret.kind === "nudge" ? (
+            <>
+              Go to {phaseConfig(ret.phase).label}
+              <ArrowRight className="h-3.5 w-3.5" />
+            </>
+          ) : (
+            <>
+              <ArrowLeft className="h-3.5 w-3.5" />
+              Back to {phaseConfig(ret.phase).label} ·{" "}
+              <span className="font-mono">{formatClock(remainingSec)}</span>
+            </>
+          )}
+        </button>
+      )}
 
       <div className="ml-auto flex items-center gap-2">
         <div

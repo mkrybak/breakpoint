@@ -229,7 +229,7 @@ localStorage autosaves the working design; export/import moves bundles between c
 
 Quick-mode challenge progress is per browser, not per design: `bp:challenges:solved` holds a JSON array of solved challenge scenario ids (forgiving parse, best-effort write).
 
-The Practice interview clock is per design: `bp:phase:<id>` holds `{ phase, remainingSec, elapsedSec, running }`. It's written on every clock change while that design's phase bar is mounted, restored on open (time away doesn't count), and removed with the design. It isn't part of `DesignRecord` or exports.
+The Practice interview clock is per design: `bp:phase:<id>` holds `{ phase, remainingSec, elapsedSec, running }`. It's written on every clock change while that design's phase bar is mounted, restored on open (time away doesn't count), and removed with the design. It isn't part of `DesignRecord` or exports. Which step's board is shown (the viewed step, T-13.2) is UI-only phase-store state: never written, and a reload opens on the clock's step.
 
 ### If a database returns (post-MVP: hosting, accounts, or AI grading)
 

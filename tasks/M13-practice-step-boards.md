@@ -52,7 +52,8 @@ The inputs most likely to bite a user that no single board's happy path covers. 
 - Tests: round-trip a record with all three boards; parse an old record with no boards; parse malformed boards; drop dangling relations; bundle export → parse is identical (review focus 5).
 
 ### T-13.2 — Clickable steps and the board slot
-- [ ] T-13.2 done
+- [x] T-13.2 done
+  - Also updated practice-phase/quick-to-practice/smoke e2e (canvas no longer shows before HLD) and phase-store tests; board-mode column gets bg-neutral-950 so the in-flow verdict row has no light band.
 
 **Files:** `src/stores/phase-store.ts` (viewed step, UI-only), `src/components/panels/PhaseBar.tsx`, `src/components/layout/PracticeWorkspace.tsx` (center slot), `src/components/panels/PhaseNotes.tsx` (follows the viewed step), new `src/components/boards/StepBoard.tsx` (switch over steps, placeholder boards until T-13.3–13.5 land), `e2e/practice-steps.spec.ts`.
 **Accept:**
@@ -124,3 +125,7 @@ The inputs most likely to bite a user that no single board's happy path covers. 
 - 2026-11-08 (T-13.1, lead call): NFR seeding "once" is persisted (`RequirementsBoard.nonFunctionalSeeded`), so an emptied Non-functional list stays empty across reloads; T-13.3's session-only Set was replaced by this flag — the user's deletion should stick.
 - 2026-11-08 (T-13.1, lead call): `ApiEndpoint.status` is a raw string (default "200"), never coerced — half-typed status never needs draft state.
 - 2026-11-08 (T-13.1, lead call): the store rejects a second relation between the same two entities (either direction) and allows self-relations; `RelationKind` reads from → to (crow's foot for "many" at that end).
+- 2026-11-07 (T-13.2 planning): viewed step = phase-store `viewedPhase` (UI-only; changed only by chip clicks, Skip, attach, reset — never by tick); Skip and later-chip jumps move the view and keep `running` as is; `autoAdvanced` flag picks the "Go to X →" nudge over "← Back to X · mm:ss"; boards show for steps before HLD (`hasStepBoard`); in board mode Verdict/ReplayScrubber become in-flow rows (same tree position), DesignCanvas unmounts, Palette/NodeConfigPanel hide; StepBoard switch + STEP_ASIDES map are the seams for T-13.3–13.5; e2e timeouts via Playwright page.clock.
+- 2026-11-08 (T-13.2, lead call): Skip and clicking a later chip move the view with the clock (they're "I'm moving on" clicks) and keep paused/running as is; only `tick` never moves the view.
+- 2026-11-08 (T-13.2, lead call): one return chip at a time — "← Back to X · mm:ss" after a manual look-back, the amber "Go to X →" nudge once the clock crossed a boundary on its own (`autoAdvanced`).
+- 2026-11-08 (T-13.2, lead call): step chips stay at the phase bar's existing ~26 px height (same as Pause/+1m/Skip), below the 32 px target — raising them means reworking the whole bar; backlog candidate.

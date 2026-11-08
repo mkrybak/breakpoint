@@ -3,11 +3,13 @@ import {
   CANVAS_UNLOCK_PHASE,
   PHASES,
   formatClock,
+  hasStepBoard,
   isCanvasLocked,
   nextPhase,
   phaseConfig,
   phaseIndex,
   usePhaseStore,
+  viewReturn,
 } from "../src/stores/phase-store";
 
 beforeEach(() => {
@@ -218,5 +220,110 @@ describe("persistence (T-12.7)", () => {
     usePhaseStore.getState().attach("p1");
     usePhaseStore.getState().reset();
     expect(usePhaseStore.getState().designId).toBe("p1");
+  });
+
+  it("attach views the restored clock's step (T-13.2)", () => {
+    localStorage.setItem(
+      "bp:phase:p1",
+      JSON.stringify({
+        phase: "hld",
+        remainingSec: 600,
+        elapsedSec: 720,
+        running: true,
+      }),
+    );
+    usePhaseStore.getState().attach("p1");
+    expect(usePhaseStore.getState().viewedPhase).toBe("hld");
+  });
+
+  it("viewing an earlier step writes nothing; the saved shape is clock-only (T-13.2)", () => {
+    usePhaseStore.getState().attach("p1");
+    usePhaseStore.getState().skip();
+    const saved = localStorage.getItem("bp:phase:p1");
+    usePhaseStore.getState().goToStep("requirements");
+    expect(localStorage.getItem("bp:phase:p1")).toBe(saved);
+    expect(Object.keys(JSON.parse(saved ?? "{}")).sort()).toEqual(
+      ["elapsedSec", "phase", "remainingSec", "running"],
+    );
+  });
+});
+
+describe("viewed step (T-13.2)", () => {
+  const st = () => usePhaseStore.getState();
+  const ret = () => viewReturn(st());
+
+  it("a fresh store views requirements, not auto-advanced", () => {
+    expect(st().viewedPhase).toBe("requirements");
+    expect(st().autoAdvanced).toBe(false);
+  });
+
+  it("going back views the earlier step while the clock stays and keeps ticking", () => {
+    st().skip();
+    st().goToStep("requirements");
+    expect(st().phase).toBe("entities");
+    expect(st().remainingSec).toBe(120);
+    expect(st().viewedPhase).toBe("requirements");
+    st().tick();
+    expect(st().remainingSec).toBe(119);
+    expect(st().viewedPhase).toBe("requirements");
+  });
+
+  it("going to the current step returns the view", () => {
+    st().skip();
+    st().goToStep("requirements");
+    st().goToStep("entities");
+    expect(st().viewedPhase).toBe(st().phase);
+    expect(ret()).toBeNull();
+  });
+
+  it("a later step jumps the clock there with its full budget and keeps running as is", () => {
+    st().toggleRunning();
+    st().goToStep("hld");
+    expect(st().phase).toBe("hld");
+    expect(st().remainingSec).toBe(900);
+    expect(st().viewedPhase).toBe("hld");
+    expect(st().running).toBe(false);
+  });
+
+  it("a timeout advances the clock but not the view, and raises the nudge", () => {
+    for (let i = 0; i < 300; i++) st().tick();
+    expect(st().phase).toBe("entities");
+    expect(st().viewedPhase).toBe("requirements");
+    expect(st().autoAdvanced).toBe(true);
+    expect(ret()).toEqual({ kind: "nudge", phase: "entities" });
+  });
+
+  it("a boundary passing while viewing back switches the back chip to the nudge", () => {
+    st().skip();
+    st().goToStep("requirements");
+    expect(ret()).toEqual({ kind: "back", phase: "entities" });
+    for (let i = 0; i < 120; i++) st().tick();
+    expect(st().phase).toBe("api");
+    expect(st().viewedPhase).toBe("requirements");
+    expect(ret()).toEqual({ kind: "nudge", phase: "api" });
+  });
+
+  it("skip after an auto-advance moves the view and clears the nudge", () => {
+    for (let i = 0; i < 300; i++) st().tick();
+    st().skip();
+    expect(st().viewedPhase).toBe(st().phase);
+    expect(st().autoAdvanced).toBe(false);
+  });
+
+  it("reset after viewing back returns the view to requirements", () => {
+    st().skip();
+    st().goToStep("requirements");
+    for (let i = 0; i < 120; i++) st().tick();
+    st().reset();
+    expect(st().viewedPhase).toBe("requirements");
+    expect(st().autoAdvanced).toBe(false);
+  });
+
+  it("hasStepBoard is true before High-level design only", () => {
+    expect(hasStepBoard("requirements")).toBe(true);
+    expect(hasStepBoard("entities")).toBe(true);
+    expect(hasStepBoard("api")).toBe(true);
+    expect(hasStepBoard("hld")).toBe(false);
+    expect(hasStepBoard("deepdive")).toBe(false);
   });
 });

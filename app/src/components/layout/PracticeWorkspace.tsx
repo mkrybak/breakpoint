@@ -1,6 +1,9 @@
+"use client";
+
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { Info } from "lucide-react";
+import { StepAside, StepBoard } from "@/components/boards/StepBoard";
 import { DesignCanvas } from "@/components/canvas/DesignCanvas";
 import { EventLog } from "@/components/hud/EventLog";
 import { MetricsBar } from "@/components/hud/MetricsBar";
@@ -14,8 +17,12 @@ import { PhaseNotes } from "@/components/panels/PhaseNotes";
 import { RequirementsPanel } from "@/components/panels/RequirementsPanel";
 import { ScenarioPanel } from "@/components/panels/ScenarioPanel";
 import { SmallScreenNotice } from "@/components/layout/SmallScreenNotice";
+import { hasStepBoard, usePhaseStore } from "@/stores/phase-store";
 
-/** The Practice-mode workspace: phase bar, full HUD, scenario/requirements/notes column. */
+/**
+ * The Practice-mode workspace: phase bar, full HUD, scenario/requirements/notes
+ * column. The center shows the viewed step's board (before HLD) or the canvas (T-13.2).
+ */
 export function PracticeWorkspace({
   designId,
   notice,
@@ -24,6 +31,8 @@ export function PracticeWorkspace({
   /** one-line banner above the phase bar (interview fallback) */
   notice?: ReactNode;
 }) {
+  const viewedPhase = usePhaseStore((s) => s.viewedPhase);
+  const board = hasStepBoard(viewedPhase) ? viewedPhase : null;
   return (
     <div className="flex h-dvh flex-col">
       <SmallScreenNotice />
@@ -31,20 +40,45 @@ export function PracticeWorkspace({
       <div className="flex min-h-0 flex-1 flex-col">
         <PhaseBar />
         <div className="flex min-h-0 flex-1">
-          <Palette />
+          {board === null && <Palette />}
           <main className="flex min-w-0 flex-1 flex-col">
             <MetricsBar menu={<DesignFileMenu />} />
             <div className="flex min-h-0 flex-1">
-              <div className="relative min-w-0 flex-1">
-                <DesignCanvas designId={designId} />
-                <div className="pointer-events-none absolute inset-x-0 top-3 z-10 flex justify-center">
+              {/* Verdict and scrubber keep their tree position in both modes (scrubber state survives a swap); only the wrappers change. */}
+              <div
+                className={
+                  board
+                    ? "flex min-w-0 flex-1 flex-col bg-neutral-950"
+                    : "relative min-w-0 flex-1"
+                }
+              >
+                <div
+                  className={
+                    board
+                      ? "flex justify-center px-3 pt-3 empty:hidden"
+                      : "pointer-events-none absolute inset-x-0 top-3 z-10 flex justify-center"
+                  }
+                >
                   <Verdict />
                 </div>
-                <div className="pointer-events-none absolute inset-x-0 bottom-3 z-10 flex justify-center">
+                <div className={board ? "min-h-0 flex-1" : "h-full"}>
+                  {board ? (
+                    <StepBoard key={board} phase={board} />
+                  ) : (
+                    <DesignCanvas designId={designId} />
+                  )}
+                </div>
+                <div
+                  className={
+                    board
+                      ? "flex justify-center px-3 pb-3 empty:hidden"
+                      : "pointer-events-none absolute inset-x-0 bottom-3 z-10 flex justify-center"
+                  }
+                >
                   <ReplayScrubber />
                 </div>
               </div>
-              <NodeConfigPanel />
+              {board === null && <NodeConfigPanel />}
             </div>
           </main>
           <aside className="flex w-72 shrink-0 flex-col border-l border-neutral-800 bg-neutral-950">
@@ -57,6 +91,7 @@ export function PracticeWorkspace({
               </Link>
               <ScenarioPanel />
               <RequirementsPanel />
+              <StepAside phase={viewedPhase} />
               <PhaseNotes />
             </div>
             <EventLog />

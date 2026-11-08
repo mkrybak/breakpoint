@@ -31,6 +31,19 @@ test("landing → design → run → live state change → verdict", async ({
     ({ key, value }) => window.localStorage.setItem(key, value),
     { key: `bp:design:${DESIGN_ID}`, value: JSON.stringify(record) },
   );
+  // the canvas shows from High-level design on (T-13.2)
+  await page.addInitScript(
+    ({ key, value }) => window.localStorage.setItem(key, value),
+    {
+      key: `bp:phase:${DESIGN_ID}`,
+      value: JSON.stringify({
+        phase: "hld",
+        remainingSec: 900,
+        elapsedSec: 0,
+        running: true,
+      }),
+    },
+  );
 
   await page.goto("/");
   await page.getByRole("link", { name: DESIGN_NAME, exact: true }).click();

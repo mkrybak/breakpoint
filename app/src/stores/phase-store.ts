@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { Phase } from "@/lib/core";
+import type { BoardPhase, Phase } from "@/lib/core";
 import {
   loadPhaseClock,
   savePhaseClock,
@@ -46,6 +46,22 @@ export function isCanvasLocked(phase: Phase): boolean {
   return phaseIndex(phase) < phaseIndex(CANVAS_UNLOCK_PHASE);
 }
 
+/** Steps before High-level design each get a center board (M13). */
+export function hasStepBoard(phase: Phase): phase is BoardPhase {
+  return phaseIndex(phase) < phaseIndex(CANVAS_UNLOCK_PHASE);
+}
+
+/** What the phase bar's return chip shows while the view is behind the clock (T-13.2). */
+export type ViewReturn = { kind: "back" | "nudge"; phase: Phase } | null;
+export function viewReturn(s: {
+  phase: Phase;
+  viewedPhase: Phase;
+  autoAdvanced: boolean;
+}): ViewReturn {
+  if (s.viewedPhase === s.phase) return null;
+  return { kind: s.autoAdvanced ? "nudge" : "back", phase: s.phase };
+}
+
 /** Whole seconds → "mm:ss" (clamped at 0, minutes not zero-padded past 2). */
 export function formatClock(sec: number): string {
   const clamped = Math.max(0, Math.floor(sec));
@@ -63,6 +79,12 @@ interface PhaseStore {
   elapsedSec: number;
   /** Whether the countdown is advancing. */
   running: boolean;
+  /** Step whose board/notes are shown (T-13.2). UI-only: never persisted; only clicks, skip, attach and reset change it — never the clock. */
+  viewedPhase: Phase;
+  /** True once the clock crossed a step boundary on its own since the view was last chosen (drives the "Go to …" nudge). */
+  autoAdvanced: boolean;
+  /** Chip click: earlier/current step → view it (clock untouched); later step → jump the clock there with its full budget (like skip) and view it. */
+  goToStep: (phase: Phase) => void;
   /** Advance the clock 1s; auto-advances phase at 0; no-op when paused. */
   tick: () => void;
   /** Jump to the next phase (resetting its countdown); finishes if last. */
@@ -92,8 +114,14 @@ function freshClock(): PhaseClock {
   };
 }
 
+const freshView = (phase: Phase) => ({
+  viewedPhase: phase,
+  autoAdvanced: false,
+});
+
 export const usePhaseStore = create<PhaseStore>((set) => ({
   ...freshClock(),
+  ...freshView(FIRST.phase),
   designId: null,
 
   tick: () =>
@@ -108,6 +136,7 @@ export const usePhaseStore = create<PhaseStore>((set) => ({
           phase: next,
           remainingSec: phaseConfig(next).durationSec,
           elapsedSec,
+          autoAdvanced: true,
         };
       // Past the last phase: stop at zero.
       return { remainingSec: 0, running: false, elapsedSec };
@@ -117,16 +146,33 @@ export const usePhaseStore = create<PhaseStore>((set) => ({
     set((s) => {
       const next = nextPhase(s.phase);
       if (!next) return { remainingSec: 0, running: false };
-      return { phase: next, remainingSec: phaseConfig(next).durationSec };
+      return {
+        phase: next,
+        remainingSec: phaseConfig(next).durationSec,
+        ...freshView(next),
+      };
+    }),
+
+  goToStep: (target) =>
+    set((s) => {
+      if (phaseIndex(target) <= phaseIndex(s.phase)) return freshView(target);
+      return {
+        phase: target,
+        remainingSec: phaseConfig(target).durationSec,
+        ...freshView(target),
+      };
     }),
 
   extend: (sec) => set((s) => ({ remainingSec: s.remainingSec + sec })),
 
   toggleRunning: () => set((s) => ({ running: !s.running })),
 
-  reset: () => set(freshClock()),
+  reset: () => set({ ...freshClock(), ...freshView(FIRST.phase) }),
 
-  attach: (id) => set({ designId: id, ...(loadPhaseClock(id) ?? freshClock()) }),
+  attach: (id) => {
+    const clock = loadPhaseClock(id) ?? freshClock();
+    set({ designId: id, ...clock, ...freshView(clock.phase) });
+  },
 
   detach: () => set({ designId: null }),
 }));

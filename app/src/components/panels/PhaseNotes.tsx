@@ -45,23 +45,27 @@ export function nfrNotesTemplate(scenario: Scenario): string {
 }
 
 export function PhaseNotes() {
-  const phase = usePhaseStore((s) => s.phase);
+  const clockPhase = usePhaseStore((s) => s.phase);
+  // Notes follow the viewed step (T-13.2), so typing across a timeout keeps
+  // writing into the same step's note.
+  const phase = usePhaseStore((s) => s.viewedPhase);
   const designId = useDesignStore((s) => s.designId);
   const note = useDesignStore((s) => s.phaseNotes[phase]);
   const setPhaseNote = useDesignStore((s) => s.setPhaseNote);
 
-  // Seed the Requirements note from the scenario NFRs, once, when it is empty.
+  // Seed the Requirements note from the scenario NFRs, once, when the clock is
+  // on Requirements and the note is empty.
   // Gated on designId so it runs after attachDesign has loaded any saved note
   // (avoids seeding, then having attach overwrite it back to empty). Reading the
   // stores via getState() keeps this out of the effect's dependency array so a
   // scenario edit or a keystroke never re-seeds. Zustand actions are not React
   // setState, so this does not trip react-hooks/set-state-in-effect.
   useEffect(() => {
-    if (phase !== "requirements" || designId === null) return;
+    if (clockPhase !== "requirements" || designId === null) return;
     const { phaseNotes, setPhaseNote: seed } = useDesignStore.getState();
     if (phaseNotes.requirements.trim() !== "") return;
     seed("requirements", nfrNotesTemplate(useScenarioStore.getState().scenario));
-  }, [phase, designId]);
+  }, [clockPhase, designId]);
 
   const recordTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
     undefined,
