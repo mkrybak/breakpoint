@@ -20,10 +20,10 @@ A 6-week build-in-public series about [BreakMyDesign](https://breakmydesign.com/
 
 ## Schedule
 
-Weekly, Thursday morning Pacific (Ukraine is +10h, so ~7–8am PT also catches their evening).
+Weekly, Thursday morning Pacific (Ukraine is +10h, so ~7–8am PT also catches their evening). W1 is the one exception: Tuesday.
 
-- [ ] [[W0-warmup|W0 — Warm-up]] · Mon–Wed Nov 9–11 (short warm-up)
-- [ ] [[W1-launch|W1 — Launch]] · Thu Nov 12
+- [ ] [[W0-warmup|W0 — Warm-up]] · Mon Nov 9 + posting morning (one-day warm-up)
+- [ ] [[W1-launch|W1 — Launch]] · **Tue Nov 10, ~7:30 PT** (moved up from Thu Nov 12)
 - [ ] [[W2-puzzle|W2 — Puzzle: what breaks first?]] · Thu Nov 19
 - [ ] [[W3-simulator-was-lying|W3 — My simulator was lying to me]] · Thu Nov 26 (US Thanksgiving; ~1% of my followers are in the US)
 - [ ] [[W4-joke|W4 — Joke]] · Thu Dec 3
@@ -58,4 +58,5 @@ Optional, slot in when ready: [[optional-ai-workflow]], [[optional-ukrainian-puz
 - 2026-11-08: Every number in a post is checked against a sim run (`assets/sims/out-*.txt`). Two draft claims changed: W3 drops "660 ms" (it came from a different design); the real story is that before the fix the queue design scored exactly like having no queue. W5 now says the breaker makes the design *recover*, not pass (the app still marks it Failed).
 - 2026-11-08: Schedule moved to **Thursdays**, starting W1 on Thu Nov 12 (I wanted to post within a few days). Warm-up shortened to Mon–Wed. Wed Nov 11 avoided (Remembrance Day, BC statutory holiday; 26% of followers in Vancouver). W3 lands on US Thanksgiving, kept since ~1% of followers are in the US.
 - 2026-11-08: Footage uses the built-in "3× traffic spike" scenario on the live site so readers can reproduce it; the custom W2 scenario is shown as a chart, not a UI recording.
+- 2026-11-09: W1 moved up to **Tue Nov 10, ~7:30 PT** (I wanted to post tomorrow morning). The warm-up shrinks to Monday plus the posting-morning comments; profile edits move to Tue before 7:00. W2 onwards stays on Thursdays from Nov 19 (9 days after W1). "9 days" recounted on Nov 9: still 9, counting only non-marketing commits.
 - 2026-11-08: No direct messages to friends (my call). Warm-up is public only: 5 comments a day Mon–Wed, 3 more right before posting, and replying to every comment in the first hour. W1 target lowered to 15–30 reactions.

@@ -9,7 +9,7 @@ Fill in 24h and 7 days after each post (LinkedIn → post → View analytics). T
 
 | Post | Date | Target | Impr. 24h | React. 24h | Comm. 24h | Impr. 7d | React. 7d | Comm. 7d | Reposts | Profile views (week) | Site visits / tries | Notes |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
-| [[W1-launch]] | 2026-11-12 | 15–30 react. | | | | | | | | | | |
+| [[W1-launch]] | 2026-11-10 | 15–30 react. | | | | | | | | | | |
 | [[W2-puzzle]] | 2026-11-19 | 10+ comments | | | | | | | | | | |
 | [[W3-simulator-was-lying]] | 2026-11-26 | 30–80 react. | | | | | | | | | | |
 | [[W4-joke]] | 2026-12-03 | 20–50 react. | | | | | | | | | | |

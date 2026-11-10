@@ -2,7 +2,7 @@
 tags: [marketing, linkedin, post]
 status: ready
 week: W1
-publish: 2026-11-12
+publish: 2026-11-10
 target: "15–30 reactions (no friend DMs in the warm-up)"
 ---
 
@@ -32,7 +32,7 @@ target: "15–30 reactions (no friend DMs in the warm-up)"
 
 **Above "…more":** "In a coding interview you can run your code. / In system design you draw boxes and hope. / So I built a Run button for diagrams…": the hook works on its own.
 
-**Facts behind the new lines:** 9 distinct commit days (Jul 12, 13, 14, 15, 19 and Nov 5, 6, 7, 8; `git log --format=%ad --date=short | sort -u`). Code written by Claude Code agents through `/build` (`process/claude-workflow.md`); I'm the one asked for product calls. Recount the days if more work lands before Nov 12.
+**Facts behind the new lines:** 9 distinct commit days (Jul 12, 13, 14, 15, 19 and Nov 5, 6, 7, 8; `git log --format=%ad --date=short -- . ':!marketing' | sort -u`, marketing-only commits excluded since they aren't building). Code written by Claude Code agents through `/build` (`process/claude-workflow.md`); I'm the one asked for product calls. Recount the days if more work lands before posting.
 
 ## Visual
 
@@ -44,7 +44,7 @@ target: "15–30 reactions (no friend DMs in the warm-up)"
 
 - [x] "Why I built it": filled from the product's own tagline ("Every design has a breaking point. Find yours before the interview does."), so it claims nothing I haven't said
 - [x] Opening rewritten 2026-11-08: "quietly building since July" overstated it (9 working days, AI wrote most of the code), and it was weak above "…more"
-- [ ] Recount commit days on posting day
+- [x] Recount commit days: still 9 (checked Mon Nov 9, 22:20 PT)
 - [ ] Watch the video on a phone once
 
 ### Other "why" options (only if true for me; each makes a personal claim)
