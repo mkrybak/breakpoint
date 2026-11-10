@@ -38,7 +38,7 @@ Optional, slot in when ready: [[optional-ai-workflow]], [[optional-ukrainian-puz
 - [ ] A real payments moment for [[W5-retry-storm]], or cut that line
 - [x] Puzzle scenario for [[W2-puzzle]] built and verified (3 and 6 replicas fail identically, 4 shards pass)
 - [x] Videos / images recorded on breakmydesign.com: see [[assets/README|assets]]
-- [ ] Profile: headline mentions BreakMyDesign, link in Featured (`assets/hero.png`), see [[W0-warmup]]
+- [ ] Profile: link in Featured (`assets/hero.png`) and one line in About, see [[W0-warmup]] (headline unchanged)
 
 | Post | Status | Needs from me |
 |---|---|---|
@@ -59,4 +59,5 @@ Optional, slot in when ready: [[optional-ai-workflow]], [[optional-ukrainian-puz
 - 2026-11-08: Schedule moved to **Thursdays**, starting W1 on Thu Nov 12 (I wanted to post within a few days). Warm-up shortened to Mon–Wed. Wed Nov 11 avoided (Remembrance Day, BC statutory holiday; 26% of followers in Vancouver). W3 lands on US Thanksgiving, kept since ~1% of followers are in the US.
 - 2026-11-08: Footage uses the built-in "3× traffic spike" scenario on the live site so readers can reproduce it; the custom W2 scenario is shown as a chart, not a UI recording.
 - 2026-11-09: W1 moved up to **Tue Nov 10, ~7:30 PT** (I wanted to post tomorrow morning). The warm-up shrinks to Monday plus the posting-morning comments; profile edits move to Tue before 7:00. W2 onwards stays on Thursdays from Nov 19 (9 days after W1). "9 days" recounted on Nov 9: still 9, counting only non-marketing commits.
+- 2026-11-09: Headline stays as it is (my call). BreakMyDesign goes in Featured and About only.
 - 2026-11-08: No direct messages to friends (my call). Warm-up is public only: 5 comments a day Mon–Wed, 3 more right before posting, and replying to every comment in the first hour. W1 target lowered to 15–30 reactions.

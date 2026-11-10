@@ -14,9 +14,10 @@ W1 moved up to Tue Nov 10 on Nov 9, so the warm-up is one day plus the posting m
 
 ## 1. Profile (Mon night, or Tue before 7:00)
 
-- [ ] Headline: keep the current one, add "· Building BreakMyDesign" at the end
-- [ ] Featured: add a link to https://breakmydesign.com/ with the hero screenshot (`assets/hero.png`)
-- [ ] About: one line at the end: "Side project: BreakMyDesign, a stress-test simulator for system design interviews."
+- [ ] Featured: add a link to https://breakmydesign.com/ with the hero screenshot (`assets/hero.png`). Title "BreakMyDesign", description "A Run button for system design diagrams. Draw a design, send traffic through it, see where it breaks. No sign-up."
+- [ ] About: one line at the end: "Side project: BreakMyDesign, a stress-test simulator for system design interviews. https://breakmydesign.com/"
+
+Headline stays as it is (my call, 2026-11-09).
 
 ## 2. Comments (15–20 min)
 
